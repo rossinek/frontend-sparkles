@@ -4,6 +4,6 @@
     "name": "Particle Flip",
     "description": "A card breaks into particles, twists in 3D, and comes back as a new page.",
     "type": "pnpm",
-    "tags": ["Vue", "Three.js", "Motion"]
+    "tags": ["Vue", "Three.js", "Shaders"]
   }
 ]

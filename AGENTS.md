@@ -14,6 +14,7 @@ Keep experiments small and self-contained. Add project-specific instructions or 
 ## Experiment Index and Publishing
 
 - Register every new experiment in `experiments.json` with a unique directory slug, English name and description, tags, and a type of `pnpm` or `static`.
+- Use technical tags naming technologies actually used by the experiment. Avoid broad subject labels or names that imply an unused library.
 - Link every new experiment in the root README as well. The global dark index is generated from `experiments.json`; do not hardcode experiment cards in `index.html`.
 - Each experiment must have an `index.html`. pnpm experiments must provide a `build` script, a committed lockfile, and output static files to `dist/`. Vite experiments must accept the `--base` build option for their published subdirectory.
 - Keep all asset URLs compatible with subdirectory hosting. Verify fonts, images, routing, and transitions in the production build.
