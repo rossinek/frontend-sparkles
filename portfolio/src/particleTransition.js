@@ -19,6 +19,7 @@ const vertexShader = `
   uniform vec4 cellSize;
   uniform vec2 cornerRadius;
   uniform float verticalTurn;
+  uniform float turnDirection;
   varying vec2 dotUV;
   varying vec2 sourceUV;
   varying vec2 destinationUV;
@@ -41,6 +42,7 @@ const vertexShader = `
   void main() {
     // Wide layouts lead with the right edge; stacked layouts lead with the top.
     float leadingEdge = mix(particleUV.x, 1.0 - particleUV.y, verticalTurn);
+    if (turnDirection < 0.0) leadingEdge = 1.0 - leadingEdge;
     float local = clamp((progress - 0.04 - (1.0 - leadingEdge) * 0.12) / 0.84, 0.0, 1.0);
     float turn = ease(local);
     float settle = ease(phase(0.35, 0.91));
@@ -54,7 +56,7 @@ const vertexShader = `
       * (1.0 - ease(phase(0.62, 0.82)));
     float edgeDelay = mix(0.0175, 0.0475, ease(leadingEdge));
     float delayedLocal = max(0.0, local - edgeDelay * lagWeight * inertia / 0.84);
-    float angle = 3.14159265 * springAt(delayedLocal);
+    float angle = turnDirection * 3.14159265 * springAt(delayedLocal);
 
     float width = mix(sourceRect.z, targetRect.z, settle);
     // Heights change column by column while the surface is bending.
@@ -196,6 +198,7 @@ export class ParticleTransition {
         cardBaseColor: { value: new THREE.Color('#faf9f6') },
         cornerRadius: { value: new THREE.Vector2() },
         verticalTurn: { value: 0 },
+        turnDirection: { value: 1 },
       },
     })
     this.shadowMaterial = new THREE.ShaderMaterial({
@@ -230,7 +233,8 @@ export class ParticleTransition {
     return texture
   }
 
-  async prepare(card) {
+  async prepare(card, { reverse = false } = {}) {
+    this.material.uniforms.turnDirection.value = reverse ? -1 : 1
     this.material.uniforms.sourceTexture.value?.dispose()
     this.material.uniforms.destinationTexture.value?.dispose()
     this.material.uniforms.destinationTexture.value = null

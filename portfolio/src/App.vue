@@ -30,7 +30,7 @@ const removeBefore = router.beforeEach(async (to, from) => {
   try {
     const { ParticleTransition } = await import('./particleTransition')
     effect ??= new ParticleTransition(effectHost.value)
-    await effect.prepare(card)
+    await effect.prepare(card, { reverse: to.path === '/' && from.path !== '/' })
     restoreOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     busy = true
