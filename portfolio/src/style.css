@@ -34,7 +34,7 @@ main:focus { outline: none; }
 .bio-top { display: flex; align-items: center; gap: 9px; padding: 25px 27px 0; font-size: 13px; font-weight: 550; }
 .tiny-flower { font-size: 25px; line-height: 1; }
 .portrait-scene { height: 320px; flex-shrink: 0; position: relative; overflow: hidden; margin-top: 12px; }
-.portrait-circle { position: absolute; width: 235px; height: 235px; border-radius: 50%; background: #A9D5D0; left: 50%; top: 58px; transform: translateX(-50%); }
+.portrait-circle { position: absolute; width: 235px; height: 235px; border-radius: 50%; background: #CFE7E5; left: 50%; top: 58px; transform: translateX(-50%); }
 .portrait-circle::after { content: ''; position: absolute; inset: -13px; border: 5px solid #fff; border-radius: 50%; }
 .portrait { width: 355px; max-width: none; height: 355px; object-fit: contain; position: absolute; bottom: -7px; left: 50%; transform: translateX(-50%); clip-path: circle(44% at 50% 53%); filter: grayscale(.96) contrast(1.05); }
 .portrait-spark { position: absolute; right: 23px; top: 51px; font-size: 49px; font-weight: 400; color: #f7f0d9; transform: rotate(13deg); }
