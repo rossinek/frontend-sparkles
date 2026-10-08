@@ -190,16 +190,18 @@ main:focus { outline: none; }
 }
 
 .social-card:focus-visible { outline-offset: -6px; }
-.project-card, .social-card { position: relative; transition: transform 220ms cubic-bezier(.2, .7, .3, 1); }
+.project-card, .social-card { position: relative; }
+.project-card, .social-symbol { transition: transform 220ms cubic-bezier(.2, .7, .3, 1); }
 .subtitles-card { --hover-rotation: -1deg; }
 .converter-card { --hover-rotation: 1.5deg; }
 .fonts-card { --hover-rotation: -1.3deg; }
 .x-card { --hover-rotation: 1.5deg; }
 .website-card { --hover-rotation: -1.5deg; }
 @media (hover: hover) {
-  .project-card:hover, .social-card:hover { transform: rotate(var(--hover-rotation)) scale(1.025); z-index: 1; }
+  .project-card:hover { transform: rotate(var(--hover-rotation)) scale(1.045); z-index: 1; }
+  .social-card:hover .social-symbol { transform: rotate(var(--hover-rotation)) scale(1.15); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .project-card, .social-card { transition: none; }
-  .project-card:hover, .social-card:hover { transform: none; }
+  .project-card, .social-symbol { transition: none; }
+  .project-card:hover, .social-card:hover .social-symbol { transform: none; }
 }
