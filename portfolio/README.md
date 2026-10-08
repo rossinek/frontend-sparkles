@@ -28,6 +28,8 @@ pnpm preview
 - `src/style.css`: responsive layout and styling.
 - `public/artur-rosa.png`: supplied portrait; the near-monochrome filter is applied in CSS.
 
-Vue Router uses hash routing so all pages can be opened directly on simple static hosting without server rewrite rules. Unknown routes return to the portfolio. There are no page-transition effects. Clickable cards have subtle hover effects, with motion disabled when reduced motion is preferred.
+Vue Router uses hash routing so all pages can be opened directly on simple static hosting without server rewrite rules. Unknown routes return to the portfolio. A Three.js prototype turns the white page shell into a rounded slab of fine white circular particles, rotates the right edge first, then lets the left edge catch up before revealing the next page. The slab adjusts its height to the destination during the turn. Clickable cards have subtle hover effects. Reduced-motion preferences and unavailable WebGL use direct navigation.
+
+The transition is implemented in `src/particleTransition.js`. Its duration, particle spacing, and depth layers are defined at the top of that file. Vertex shaders animate the dots on the GPU. The edge rotation winds back, releases, overshoots 180 degrees, and rebounds; delayed columns let the left edge catch up. This is a visual spring approximation rather than a physics simulation.
 
 WithSubtitles uses `nrk:media-subtitles` and WithConverter uses `fluent:shapes-24-filled` from Iconify, embedded locally as SVG. The typography symbol is a simple illustrative mark, not an official brand logo. WithConverter and whatthefreefont descriptions are provisional portfolio copy and can be refined later.

@@ -1,4 +1,4 @@
-import { createApp, nextTick } from 'vue'
+import { createApp } from 'vue'
 import { createRouter, createWebHashHistory } from 'vue-router'
 import App from './App.vue'
 import Home from './Home.vue'
@@ -21,10 +21,8 @@ const router = createRouter({
   scrollBehavior: () => ({ top: 0 }),
 })
 
-router.afterEach(async to => {
+router.afterEach(to => {
   document.title = to.meta.title
-  await nextTick()
-  document.querySelector('main')?.focus({ preventScroll: true })
 })
 
 createApp(App).use(router).mount('#app')
