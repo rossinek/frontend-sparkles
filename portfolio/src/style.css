@@ -195,8 +195,8 @@ main:focus { outline: none; }
 .subtitles-card { --hover-rotation: -1deg; }
 .converter-card { --hover-rotation: 1.5deg; }
 .fonts-card { --hover-rotation: -1.3deg; }
-.x-card { --hover-rotation: 1.5deg; }
-.website-card { --hover-rotation: -1.5deg; }
+.x-card { --hover-rotation: 8deg; }
+.website-card { --hover-rotation: -8deg; }
 @media (hover: hover) {
   .project-card:hover { transform: rotate(var(--hover-rotation)) scale(1.045); z-index: 1; }
   .social-card:hover .social-symbol { transform: rotate(var(--hover-rotation)) scale(1.15); }
