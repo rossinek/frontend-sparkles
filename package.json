@@ -1,0 +1,9 @@
+{
+  "name": "frontend-sparkles-index",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.23.0",
+  "scripts": {
+    "build": "node scripts/build-site.mjs"
+  }
+}

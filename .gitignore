@@ -5,3 +5,5 @@ dist/
 *.local
 
 .vite/
+
+_site/

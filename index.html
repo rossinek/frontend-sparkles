@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#171819">
+  <meta name="description" content="Small frontend experiments in motion, playful interfaces, and visual interactions by Artur Rosa.">
+  <title>Frontend Sparkles — Experiments by Artur Rosa</title>
+  <style>
+    :root { color-scheme: dark; font-family: ui-sans-serif, system-ui, sans-serif; background: #171819; color: #ecece7; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    a { color: inherit; text-decoration: none; }
+    a:focus-visible { outline: 2px solid #c7d9f0; outline-offset: 6px; }
+    main { width: min(1000px, calc(100% - 48px)); margin: 0 auto; padding: 56px 0 36px; min-height: 100dvh; display: flex; flex-direction: column; }
+    header { display: flex; justify-content: space-between; align-items: center; gap: 24px; font-size: 13px; color: #a0a29d; }
+    .brand { color: #ecece7; display: flex; align-items: center; gap: 10px; font-weight: 600; }
+    .brand svg { width: 19px; height: 19px; color: #cbdebc; }
+    .intro { padding: 100px 0 60px; max-width: 640px; }
+    .eyebrow { font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: #92958e; }
+    h1 { font-weight: 500; font-size: clamp(40px, 6vw, 64px); line-height: 1.08; letter-spacing: -.055em; margin: 20px 0 24px; }
+    .intro p { max-width: 460px; font-size: 16px; line-height: 1.7; color: #a0a29d; margin: 0; }
+    .experiments { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr)); gap: 20px; }
+    .experiment { max-width: 480px; padding: 28px; background: #202223; border: 1px solid #323536; border-radius: 18px; transition: background 180ms ease, border-color 180ms ease; }
+    .experiment:hover { background: #262829; border-color: #626865; }
+    .card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 42px; }
+    .number { font-size: 12px; font-variant-numeric: tabular-nums; color: #848983; }
+    .arrow { font-size: 26px; color: #c7d9f0; }
+    h2 { font-size: 25px; font-weight: 500; letter-spacing: -.04em; margin: 0 0 12px; }
+    .experiment p { color: #a0a29d; font-size: 14px; line-height: 1.7; max-width: 340px; margin: 0; }
+    .tags { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 28px; }
+    .tags span { font-size: 10px; color: #bec6bd; border: 1px solid #3c413e; border-radius: 100px; padding: 5px 10px; }
+    footer { margin-top: auto; padding-top: 90px; font-size: 12px; color: #797e78; display: flex; justify-content: space-between; gap: 20px; }
+    header a:hover, footer a:hover { color: #ecece7; }
+    @media(max-width: 520px) { main { width: calc(100% - 36px); padding-top: 28px; } .intro { padding: 70px 0 42px; } .experiment { padding: 24px; } footer { padding-top: 60px; } }
+    @media(prefers-reduced-motion: reduce) { .experiment { transition: none; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <a class="brand" href="./"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2v20M2 12h20M5 5l14 14M5 19L19 5" stroke="currentColor" stroke-width="1.5"/></svg>Frontend Sparkles</a>
+      <a href="https://github.com/rossinek/frontend-sparkles">GitHub ↗</a>
+    </header>
+    <section class="intro">
+      <span class="eyebrow">A playground by Artur Rosa</span>
+      <h1>Small experiments.<br>A little spark.</h1>
+      <p>Exploring motion, playful interfaces, and the small details that make the web feel alive.</p>
+    </section>
+    <section class="experiments" aria-label="Experiments">
+      <!-- EXPERIMENTS -->
+    </section>
+    <footer><span>Made out of curiosity.</span><a href="https://arturrosa.pl">Artur Rosa ↗</a></footer>
+  </main>
+</body>
+</html>
