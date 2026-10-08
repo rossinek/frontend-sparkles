@@ -18,6 +18,7 @@ const vertexShader = `
   uniform float dotSize;
   uniform vec4 cellSize;
   uniform vec2 cornerRadius;
+  uniform float verticalTurn;
   varying vec2 dotUV;
   varying vec2 sourceUV;
   varying vec2 destinationUV;
@@ -27,8 +28,9 @@ const vertexShader = `
   float phase(float a, float b) { return clamp((progress - a) / (b - a), 0.0, 1.0); }
 
   void main() {
-    // Each column rotates about its own horizontal axis. The right edge leads.
-    float local = clamp((progress - 0.04 - (1.0 - particleUV.x) * 0.12) / 0.84, 0.0, 1.0);
+    // Wide layouts lead with the right edge; stacked layouts lead with the top.
+    float leadingEdge = mix(particleUV.x, 1.0 - particleUV.y, verticalTurn);
+    float local = clamp((progress - 0.04 - (1.0 - leadingEdge) * 0.12) / 0.84, 0.0, 1.0);
     float turn = ease(local);
     // The edge winds back slightly, releases, overshoots 180 degrees and rebounds.
     float windup = ease(clamp(local / 0.04, 0.0, 1.0));
@@ -67,13 +69,15 @@ const vertexShader = `
 
     float c = cos(angle);
     float s = sin(angle);
-    mat3 rotation = mat3(1.0, 0.0, 0.0, 0.0, c, s, 0.0, -s, c);
+    mat3 rotationX = mat3(1.0, 0.0, 0.0, 0.0, c, s, 0.0, -s, c);
+    mat3 rotationY = mat3(c, 0.0, -s, 0.0, 1.0, 0.0, s, 0.0, c);
+    mat3 rotation = verticalTurn > 0.5 ? rotationY : rotationX;
     point = rotation * point;
     point.x += center.x - viewport.x * 0.5;
     point.y += viewport.y * 0.5 - center.y;
     dotUV = uv;
     sourceUV = vec2(particleUV.x, 1.0 - particleUV.y) + (uv - 0.5) / grid;
-    destinationUV = particleUV + (uv - 0.5) / grid;
+    destinationUV = mix(particleUV, vec2(1.0) - particleUV, verticalTurn) + (uv - 0.5) / grid;
     separation = spread;
     vec4 viewPoint = modelViewMatrix * vec4(point, 1.0);
     // Billboards face the camera: depth comes from position, not faceted cube faces.
@@ -204,6 +208,7 @@ export class ParticleTransition {
         destinationTexture: { value: null },
         cardBaseColor: { value: new THREE.Color('#faf9f6') },
         cornerRadius: { value: new THREE.Vector2() },
+        verticalTurn: { value: 0 },
       },
     })
     this.shadowMaterial = new THREE.ShaderMaterial({
@@ -277,11 +282,6 @@ export class ParticleTransition {
     })
     this.host.prepend(this.clone)
     this.host.style.display = 'block'
-    this.blobSize = Math.hypot(innerWidth, innerHeight) * 1.20
-    this.host.style.setProperty('--blob-size', `${this.blobSize}px`)
-    const belowScreen = innerHeight + 24
-    this.host.style.setProperty('--blob-first-y', `${belowScreen}px`)
-    this.host.style.setProperty('--blob-second-y', `${belowScreen}px`)
     this.renderer.domElement.style.opacity = '1'
     this.renderer.clear()
   }
@@ -325,6 +325,7 @@ export class ParticleTransition {
     this.mesh.frustumCulled = false
     this.scene.add(this.mesh)
     const uniforms = this.material.uniforms
+    uniforms.verticalTurn.value = matchMedia('(max-width: 850px)').matches ? 1 : 0
     uniforms.sourceRect.value.copy(this.source.center)
     uniforms.targetRect.value.copy(target.center)
     uniforms.cornerRadius.value.set(this.source.radius, target.radius)
@@ -342,11 +343,6 @@ export class ParticleTransition {
 
   async play(card, reveal) {
     if (!card) { this.stop(); return Promise.resolve() }
-    // Match the destination project artwork, or the bio card on the home page.
-    const colorCard = card.querySelector('.detail-art, .bio-card') ?? card
-    const destinationColor = getComputedStyle(colorCard).backgroundColor
-    this.host.style.setProperty('--blob-second-color', destinationColor)
-    this.host.style.setProperty('--blob-first-color', `color-mix(in srgb, ${destinationColor} 65%, white)`)
     this.material.uniforms.destinationTexture.value = await this.capture(card)
     this.createParticles(measure(card))
     return new Promise(resolve => {
@@ -356,6 +352,9 @@ export class ParticleTransition {
       const frame = now => {
         start ??= now
         const t = Math.min((now - start) / DURATION, 1)
+        const backgroundDim = THREE.MathUtils.smoothstep(t, 0.0, 0.28)
+          * (1 - THREE.MathUtils.smoothstep(t, 0.60, 1.0))
+        this.host.style.setProperty('--background-dim', String(backgroundDim))
         const returnEnvelope = 1 - THREE.MathUtils.smoothstep(t, 0.55, 0.97)
         const pullback = THREE.MathUtils.smoothstep(t, 0.0, 0.18) * returnEnvelope
         const orbitReturn = THREE.MathUtils.clamp((t - 0.45) / 0.50, 0, 1)
@@ -378,23 +377,6 @@ export class ParticleTransition {
           pivotY + elevatedY, elevatedZ * Math.cos(orbitAngle) - pivotX * Math.sin(orbitAngle))
         // Orbit the card's center while retaining the original off-center framing.
         this.camera.rotation.set(-elevationAngle, -orbitAngle, 0, 'YXZ')
-        const startY = innerHeight + 24
-        const blobRadius = this.blobSize / 2
-        // Stop just beyond full coverage so easing remains visible at the edge.
-        const coveredY = Math.sqrt(blobRadius * blobRadius - (innerWidth / 2) ** 2) - blobRadius - 18
-        const exitY = -this.blobSize - 24
-        const blobY = (enterStart, enterEnd, exitStart, exitEnd) => {
-          // Fast entry decelerates as the circle covers the viewport.
-          const entryTime = THREE.MathUtils.clamp((t - enterStart) / (enterEnd - enterStart), 0, 1)
-          const entry = 1 - Math.pow(1 - entryTime, 3)
-          const entryY = THREE.MathUtils.lerp(startY, coveredY, entry)
-          // Leave gently, then accelerate off the top in reverse layer order.
-          const exitTime = THREE.MathUtils.clamp((t - exitStart) / (exitEnd - exitStart), 0, 1)
-          const exit = exitTime * exitTime
-          return entryY + (exitY - coveredY) * exit
-        }
-        this.host.style.setProperty('--blob-first-y', `${blobY(0.0, 0.50, 0.72, 1.0)}px`)
-        this.host.style.setProperty('--blob-second-y', `${blobY(0.14, 0.57, 0.63, 0.89)}px`)
         this.material.uniforms.progress.value = t
         this.material.uniforms.opacity.value = Math.min(t / 0.06, 1)
         this.clone.style.opacity = String(1 - Math.min(t / 0.07, 1))
@@ -412,8 +394,7 @@ export class ParticleTransition {
     cancelAnimationFrame(this.raf)
     this.clone?.remove()
     this.host.style.display = 'none'
-    this.host.style.removeProperty('--blob-first-y')
-    this.host.style.removeProperty('--blob-second-y')
+    this.host.style.removeProperty('--background-dim')
     this.resolve?.()
     this.resolve = null
   }

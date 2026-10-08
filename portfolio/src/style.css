@@ -4,7 +4,7 @@
 :root {
   font-family: 'DM Sans', sans-serif;
   color: #222321;
-  background: #eeede9;
+  background: #343638;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -13,14 +13,13 @@
 
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; }
+.page-host { min-height: 100svh; display: grid; align-items: center; }
 .page-host.is-transitioning { opacity: 0; pointer-events: none; }
-.page-host main { transition: box-shadow 500ms ease-out; }
+.page-host main { margin-block: 24px; transition: box-shadow 500ms ease-out; }
 .page-host.is-shadow-muted main { box-shadow: 0 24px 65px -42px transparent; }
 .particle-transition { display: none; position: fixed; inset: 0; z-index: 100; pointer-events: auto; }
 .particle-transition { overflow: hidden; }
-.transition-blob { position: absolute; top: 0; left: 50%; width: var(--blob-size, 0px); height: var(--blob-size, 0px); border-radius: 50%; pointer-events: none; will-change: transform; z-index: 0; }
-.transition-blob-first { background: var(--blob-first-color, #e8bfc9); transform: translate3d(-50%, var(--blob-first-y, 100vh), 0); }
-.transition-blob-second { background: var(--blob-second-color, #a59ab7); transform: translate3d(-50%, var(--blob-second-y, 100vh), 0); }
+.particle-transition::before { content: ''; position: absolute; inset: 0; background: #141618; opacity: var(--background-dim, 0); pointer-events: none; }
 .particle-transition canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; }
 button, a { -webkit-tap-highlight-color: transparent; }
 a { color: inherit; text-decoration: none; }
@@ -134,65 +133,125 @@ main:focus { outline: none; }
   .detail-content { gap: 35px; }
 }
 @media (max-width: 850px) {
-  .portfolio-shell { grid-template-columns: 1fr; max-width: 660px; margin: 24px auto; }
-  .bio-card { display: grid; grid-template-columns: 1fr 1fr; }
-  .bio-top { grid-column: 1; padding: 23px 24px 0; }
-  .portrait-scene { grid-column: 2; grid-row: 1 / 4; align-self: center; height: 280px; margin: 0; }
-  .portrait { width: 300px; height: 300px; bottom: 0; }
-  .portrait-circle { width: 185px; height: 185px; top: 70px; }
-  .portrait-spark { top: 37px; right: 17px; }
-  .bio-copy { grid-column: 1; grid-row: 2; padding-top: 18px; }
-  .bio-bottom { grid-column: 1; grid-row: 3; margin-left: 24px; margin-right: 0; font-size: 10px; }
-  .work-header h2 { font-size: 48px; }
-  .caption-line { font-size: 31px; }
-  .caption-icon { right: 30px; width: 70px; height: 70px; }
-  .detail-shell { width: calc(100% - 48px); margin: 24px auto; padding: 28px; }
-  .detail-content { grid-template-columns: 1fr; gap: 35px; }
-  .detail-art { height: 310px; }
-  .detail-copy h1 { font-size: 46px; }
-  .detail-description { max-width: 560px; }
+  .portfolio-shell, .detail-shell { width: calc(100% - 48px); max-width: 660px; margin: 24px auto; height: min(860px, calc(100svh - 48px)); min-height: 640px; padding: 24px; border-radius: 30px; }
+  .portfolio-shell { grid-template-columns: 1fr; grid-template-rows: minmax(220px, .8fr) minmax(0, 1.4fr); gap: 20px; }
+  .bio-card { display: grid; grid-template-columns: 1fr 45%; }
+  .bio-top { grid-column: 1; padding: 20px 22px 0; }
+  .portrait-scene { grid-column: 2; grid-row: 1 / 4; align-self: center; height: 230px; width: 100%; margin: 0; }
+  .portrait { width: 255px; height: 255px; bottom: -3px; }
+  .portrait-circle { width: 157px; height: 157px; top: 58px; }
+  .portrait-circle::after { inset: -9px; border-width: 4px; }
+  .portrait-spark { top: 35px; right: 12px; font-size: 30px; }
+  .bio-copy { grid-column: 1; grid-row: 2; padding: 8px 22px; }
+  .bio-copy h1 { font-size: 38px; }
+  .bio-copy p { font-size: 14px; line-height: 1.4; }
+  .intro { font-size: 24px; }
+  .bio-bottom { grid-column: 1; grid-row: 3; margin: 0 0 0 22px; padding: 10px 0 14px; font-size: 10px; }
+  .work-header { padding-bottom: 14px; }
+  .work-header h2 { font-size: 35px; letter-spacing: -2px; }
+  .heading-arrow { font-size: 32px; }
+  .work-section { min-height: 0; }
+  .project-grid { min-height: 0; grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); }
+  .project-card { min-height: 0; padding: 16px; }
+  .subtitle-art { margin: 12px 0; }
+  .caption-line { font-size: 26px; }
+  .caption-icon { right: 22px; width: 58px; height: 58px; }
+  .small-card-art { padding: 8px 0; }
+  .small-card-art .project-mark { width: 52px; height: 52px; }
+  .font-mark { font-size: 64px; }
+  .font-mark > span { font-size: 34px; right: -43px; }
+  .detail-shell { display: flex; flex-direction: column; }
+  .detail-content { flex: 1; min-height: 0; grid-template-columns: 1fr; grid-template-rows: minmax(170px, 1fr) auto; gap: 22px; margin-top: 20px; }
+  .detail-art { height: 100%; min-height: 0; padding: 20px; }
+  .detail-art > .project-mark { width: 120px; height: 120px; }
+  .detail-art > .font-mark { font-size: 115px; }
+  .detail-art > .font-mark > span { font-size: 60px; }
+  .detail-copy h1 { font-size: 36px; margin: 10px 0; }
+  .detail-tagline { font-size: 21px; margin-bottom: 12px; }
+  .detail-description { max-width: none; font-size: 15px; line-height: 1.55; margin-bottom: 18px; }
+  .demo-note, .detail-footer { display: none; }
 }
 @media (max-width: 520px) {
-  .portfolio-shell { width: calc(100% - 24px); margin: 12px auto; padding: 14px; border-radius: 27px; gap: 27px; }
-  .bio-card { display: flex; }
-  .bio-top { padding: 23px 24px 0; }
-  .portrait-scene { width: 100%; height: 265px; margin-top: 6px; }
-  .portrait { width: 300px; height: 300px; bottom: -6px; }
-  .portrait-circle { width: 190px; height: 190px; top: 50px; }
-  .portrait-spark { right: 29px; top: 31px; font-size: 44px; }
-  .bio-copy { padding: 6px 24px 20px; }
-  .intro { font-size: 25px; }
-  .bio-copy h1 { font-size: 48px; margin-bottom: 3px; }
-  .bio-copy p { font-size: 16px; max-width: 290px; }
-  .bio-bottom { margin: 0 24px; font-size: 11px; }
-  .work-header { padding: 0 5px 22px; }
-  .work-header h2 { font-size: clamp(33px, 9vw, 44px); letter-spacing: -2.6px; }
-  .heading-arrow { font-size: 36px; }
-  .project-grid { grid-template-columns: minmax(0, 1fr) 72px; gap: 13px; }
-  .subtitles-card { grid-column: 1; min-height: 290px; padding: 18px; }
-  .caption-line { font-size: clamp(19px, 5.5vw, 28px); letter-spacing: -.9px; }
-  .caption-icon { right: 18px; width: 37px; height: 37px; }
-  .social-stack { grid-column: 2; grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
-  .social-card { padding: 12px; }
-  .subtitles-card .card-category { font-size: 9px; }
-  .subtitles-card .card-bottom { flex-wrap: wrap; }
-  .subtitles-card .card-bottom h3 { font-size: clamp(16px, 4.5vw, 21px); }
-  .converter-card, .fonts-card { grid-column: 1 / -1; min-height: 230px; padding: 23px; }
-  .card-bottom h3 { font-size: 21px; }
-  .detail-shell { width: calc(100% - 24px); margin: 12px auto; padding: 22px; border-radius: 27px; }
+  .page-host main { margin-block: 12px; }
+  .portfolio-shell, .detail-shell { width: calc(100% - 24px); margin: 12px auto; height: min(740px, calc(100svh - 24px)); min-height: 560px; padding: 12px; border-radius: 25px; }
+  .portfolio-shell { grid-template-rows: minmax(185px, .85fr) minmax(0, 1.5fr); gap: 14px; }
+  .bio-card { grid-template-columns: 58% 42%; border-radius: 18px; }
+  .bio-top { padding: 16px 15px 0; font-size: 11px; gap: 6px; }
+  .tiny-flower { font-size: 20px; }
+  .bio-copy { padding: 5px 15px 16px; }
+  .intro { font-size: 20px; letter-spacing: -.8px; }
+  .bio-copy h1 { font-size: clamp(26px, 7.6vw, 36px); letter-spacing: -1.8px; }
+  .bio-copy p { font-size: 12px; line-height: 1.45; }
+  .bio-bottom, .portrait-spark { display: none; }
+  .portrait-scene { height: 175px; grid-row: 1 / 3; }
+  .portrait { width: 190px; height: 190px; bottom: -1px; }
+  .portrait-circle { width: 115px; height: 115px; top: 45px; }
+  .portrait-circle::after { inset: -7px; border-width: 3px; }
+  .work-header { padding: 0 3px 10px; }
+  .work-header h2 { font-size: 27px; letter-spacing: -1.5px; }
+  .heading-arrow { font-size: 26px; }
+  .project-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 55px; gap: 10px; }
+  .project-card { border-radius: 17px; padding: 12px; }
+  .subtitles-card { grid-column: 1 / 3; }
+  .social-stack { grid-column: 3; border-radius: 17px; }
+  .social-card { padding: 10px; }
+  .x-card { border-radius: 17px 17px 0 0; }
+  .website-card { border-radius: 0 0 17px 17px; }
+  .social-symbol { width: 25px; height: 25px; }
+  .globe { width: 30px; height: 30px; }
+  .converter-card { grid-column: 1; }
+  .fonts-card { grid-column: 2 / 4; }
+  .card-category { font-size: 8px; }
+  .card-top > svg { width: 15px; height: 15px; }
+  .caption-line { font-size: 21px; letter-spacing: -.8px; }
+  .caption-icon { right: 16px; width: 40px; height: 40px; }
+  .caption-highlight { margin-top: 4px; padding: 1px 6px 2px; }
+  .card-bottom h3, .subtitles-card .card-bottom h3 { font-size: 13px; letter-spacing: -.3px; margin-bottom: 3px; }
+  .card-bottom p { font-size: 9px; }
+  .small-card-art .project-mark { width: 42px; height: 42px; }
+  .font-mark { font-size: 53px; }
+  .font-mark > span { font-size: 29px; right: -36px; }
+  .detail-shell { padding: 18px; }
   .detail-signature > span { display: none; }
   .detail-signature { font-size: 11px; }
   .back-link { font-size: 12px; gap: 7px; }
-  .detail-content { margin-top: 27px; gap: 29px; }
-  .detail-art { height: 290px; padding: 23px; }
-  .detail-art > .project-mark { width: 140px; height: 140px; }
-  .detail-art > .font-mark { font-size: 130px; }
-  .detail-art > .font-mark > span { font-size: 67px; }
-  .detail-copy h1 { font-size: 35px; letter-spacing: -1.8px; }
-  .detail-copy .long-project-name { font-size: clamp(24px, 7vw, 30px); letter-spacing: -1.3px; }
-  .detail-tagline { font-size: 21px; }
-  .detail-description { font-size: 15px; }
-  .visit-link { gap: 12px; padding: 15px; font-size: 12px; }
+  .detail-content { margin-top: 14px; gap: 16px; grid-template-rows: minmax(130px, 1fr) auto; }
+  .detail-art { padding: 16px; border-radius: 18px; }
+  .detail-art-label { font-size: 9px; }
+  .detail-art-bottom { font-size: 11px; }
+  .detail-art > .project-mark { width: 85px; height: 85px; }
+  .detail-art > .font-mark { font-size: 88px; letter-spacing: -9px; }
+  .detail-art > .font-mark > span { font-size: 45px; right: -15px; }
+  .detail-copy h1 { font-size: 29px; letter-spacing: -1.5px; margin: 8px 0; }
+  .detail-copy .long-project-name { font-size: clamp(22px, 6.5vw, 29px); }
+  .detail-copy .eyebrow { font-size: 9px; }
+  .detail-tagline { font-size: 18px; margin-bottom: 10px; }
+  .detail-description { font-size: 13px; line-height: 1.5; margin-bottom: 14px; }
+  .visit-link { gap: 12px; padding: 12px 14px; font-size: 12px; }
+}
+
+@media (max-width: 520px) and (max-height: 650px) {
+  .portfolio-shell, .detail-shell { min-height: 520px; }
+  .portfolio-shell { grid-template-rows: 175px minmax(0, 1fr); gap: 10px; }
+  .bio-top { padding-top: 12px; }
+  .bio-copy { padding-bottom: 10px; }
+  .bio-copy p { font-size: 11px; }
+  .work-header h2 { font-size: 24px; }
+  .project-card { padding: 10px; }
+  .card-bottom h3, .subtitles-card .card-bottom h3 { font-size: 12px; }
+  .card-bottom p { font-size: 8px; }
+  .subtitle-art { margin: 5px 0; }
+  .caption-line { font-size: 18px; }
+  .caption-icon { width: 32px; height: 32px; right: 12px; }
+  .small-card-art { padding: 4px 0; }
+  .small-card-art .project-mark { width: 32px; height: 32px; }
+  .font-mark { font-size: 43px; }
+  .font-mark > span { font-size: 23px; right: -30px; }
+  .detail-content { gap: 12px; grid-template-rows: minmax(110px, 1fr) auto; }
+  .detail-copy h1 { font-size: 26px; }
+  .detail-tagline { font-size: 16px; margin-bottom: 8px; }
+  .detail-description { font-size: 12px; margin-bottom: 12px; }
+  .detail-art > .project-mark { width: 64px; height: 64px; }
 }
 
 .social-card:focus-visible { outline-offset: -6px; }

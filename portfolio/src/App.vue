@@ -75,8 +75,5 @@ onBeforeUnmount(() => {
   <div ref="pageHost" class="page-host" :class="{ 'is-transitioning': transitioning, 'is-shadow-muted': shadowMuted }" :inert="transitioning">
     <RouterView />
   </div>
-  <div ref="effectHost" class="particle-transition" aria-hidden="true">
-    <div class="transition-blob transition-blob-first"></div>
-    <div class="transition-blob transition-blob-second"></div>
-  </div>
+  <div ref="effectHost" class="particle-transition" aria-hidden="true"></div>
 </template>

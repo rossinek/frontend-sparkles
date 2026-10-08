@@ -34,6 +34,8 @@ The transition is implemented in `src/particleTransition.js`. Its duration, part
 
 The outgoing and incoming cards are captured locally with html-to-image and mapped onto the particles. Their content separates into dots, fades to white during the turn, and reforms as the destination card. DM Sans and Manrope are served locally from `public/fonts`, with their Open Font License files alongside them, so card captures do not depend on external font requests.
 
-Two large circles rise from the bottom behind the particle scene with a short delay between them. The second circle matches the destination project artwork (or the bio card when returning home), and the first uses a lighter tint of that color. They cover the viewport during the turn and leave through the top during reconstruction, with the second circle leaving first. The card's regular shadow fades in after the transition.
+The charcoal page background smoothly darkens during the transition and returns to its resting color as the card reforms. The card's regular shadow fades in after the transition.
+
+At widths up to 850px, the stacked layout turns around the vertical axis, with the top edge leading. Compact layouts use matching viewport-based card heights for the home and project pages; phones keep the portrait beside the bio and the two smaller project cards in one row. Very short viewports can still scroll rather than clipping essential content.
 
 WithSubtitles uses `nrk:media-subtitles` and WithConverter uses `fluent:shapes-24-filled` from Iconify, embedded locally as SVG. The typography symbol is a simple illustrative mark, not an official brand logo. WithConverter and whatthefreefont descriptions are provisional portfolio copy and can be refined later.
