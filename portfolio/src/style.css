@@ -36,7 +36,7 @@ main:focus { outline: none; }
 .portrait-scene { height: 332px; position: relative; overflow: hidden; margin-top: 12px; }
 .portrait-circle { position: absolute; width: 265px; height: 265px; border: 1px solid #ffffffa8; border-radius: 50%; background: #d5c7f0; left: 50%; top: 45px; transform: translateX(-50%); }
 .portrait-circle::after { content: ''; position: absolute; inset: 13px; border: 1px solid #ffffff78; border-radius: 50%; }
-.portrait { width: 355px; max-width: none; height: 355px; object-fit: contain; position: absolute; bottom: -17px; left: 50%; transform: translateX(-50%); filter: grayscale(.96) contrast(1.05); }
+.portrait { width: 355px; max-width: none; height: 355px; object-fit: contain; position: absolute; bottom: -7px; left: 50%; transform: translateX(-50%); clip-path: circle(44% at 50% 53%); filter: grayscale(.96) contrast(1.05); }
 .portrait-spark { position: absolute; right: 23px; top: 51px; font-size: 49px; font-weight: 400; color: #f7f0d9; transform: rotate(13deg); }
 .bio-copy { padding: 18px 28px 26px; }
 .intro { font-size: 29px; letter-spacing: -1.4px; }
@@ -123,7 +123,7 @@ main:focus { outline: none; }
   .bio-copy { padding-left: 23px; padding-right: 23px; }
   .bio-copy h1 { font-size: 42px; }
   .bio-copy p { font-size: 15px; }
-  .portrait { width: 320px; height: 320px; }
+  .portrait { width: 320px; height: 320px; bottom: 7px; }
   .portrait-circle { width: 235px; height: 235px; top: 62px; }
   .portrait-spark { right: 17px; font-size: 39px; }
   .work-header h2 { letter-spacing: -2.5px; }
@@ -134,7 +134,7 @@ main:focus { outline: none; }
   .bio-card { display: grid; grid-template-columns: 1fr 1fr; }
   .bio-top { grid-column: 1 / -1; padding: 23px 24px 0; }
   .portrait-scene { grid-column: 2; grid-row: 2 / 4; height: 280px; margin: 0; }
-  .portrait { width: 300px; height: 300px; bottom: -22px; }
+  .portrait { width: 300px; height: 300px; bottom: -16px; }
   .portrait-circle { width: 205px; height: 205px; top: 50px; }
   .portrait-spark { top: 37px; right: 17px; }
   .bio-copy { grid-column: 1; grid-row: 2; padding-top: 35px; }
@@ -154,7 +154,7 @@ main:focus { outline: none; }
   .bio-card { display: flex; }
   .bio-top { padding: 23px 24px 0; }
   .portrait-scene { height: 290px; margin-top: 6px; }
-  .portrait { width: 330px; height: 330px; bottom: -31px; }
+  .portrait { width: 330px; height: 330px; bottom: -8px; }
   .portrait-circle { width: 245px; height: 245px; top: 33px; }
   .portrait-spark { right: 29px; top: 31px; font-size: 44px; }
   .bio-copy { padding: 15px 24px 24px; }
