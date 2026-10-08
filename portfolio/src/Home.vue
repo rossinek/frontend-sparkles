@@ -48,7 +48,7 @@ const portraitUrl = `${import.meta.env.BASE_URL}artur-rosa.png`
 
         <RouterLink :to="`/projects/${projects[1].slug}`" class="project-card converter-card" aria-label="Explore WithConverter">
           <div class="card-top"><span class="card-category">02 / File conversion</span><ArrowIcon /></div>
-          <div class="small-card-art"><ProjectMark kind="converter" /><span class="format-chip">A → B</span></div>
+          <div class="small-card-art"><ProjectMark kind="converter" /></div>
           <div class="card-bottom"><div><h3>WithConverter</h3><p>{{ projects[1].label }}</p></div></div>
         </RouterLink>
 

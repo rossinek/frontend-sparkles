@@ -74,7 +74,6 @@ main:focus { outline: none; }
 .fonts-card { grid-column: 2 / 4; background: #dce8ad; min-height: 225px; }
 .small-card-art { flex: 1; display: flex; align-items: center; justify-content: center; gap: 15px; padding: 16px 0 18px; }
 .small-card-art .project-mark { width: 66px; height: 66px; }
-.format-chip { border: 1px solid #ffffff32; border-radius: 30px; padding: 6px 10px; font-size: 10px; color: #babbad; white-space: nowrap; }
 .font-mark { display: flex; align-items: center; justify-content: center; position: relative; font-family: Georgia, serif; letter-spacing: -8px; font-size: 83px; line-height: 1; }
 .font-mark > span { font-family: 'DM Sans', sans-serif; font-size: 47px; letter-spacing: 0; position: absolute; top: -5px; right: -61px; }
 .fonts-card .small-card-art { padding-right: 35px; }
@@ -115,7 +114,6 @@ main:focus { outline: none; }
   .card-bottom h3 { font-size: 17px; }
   .caption-icon { right: 18px; width: 59px; height: 59px; }
   .small-card-art { gap: 3px; }
-  .format-chip { display: none; }
   .bio-copy { padding-left: 23px; padding-right: 23px; }
   .bio-copy h1 { font-size: 42px; }
   .bio-copy p { font-size: 15px; }
@@ -171,7 +169,6 @@ main:focus { outline: none; }
   .subtitles-card .card-bottom h3 { font-size: clamp(16px, 4.5vw, 21px); }
   .converter-card, .fonts-card { grid-column: 1 / -1; min-height: 230px; padding: 23px; }
   .card-bottom h3 { font-size: 21px; }
-  .format-chip { display: block; margin-left: 15px; }
   .detail-shell { width: calc(100% - 24px); margin: 12px auto; padding: 22px; border-radius: 27px; }
   .detail-signature > span { display: none; }
   .detail-signature { font-size: 11px; }

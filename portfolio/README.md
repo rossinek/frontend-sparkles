@@ -30,4 +30,4 @@ pnpm preview
 
 Vue Router uses hash routing so all pages can be opened directly on simple static hosting without server rewrite rules. Unknown routes return to the portfolio. There are no page-transition effects. Clickable cards have subtle hover effects, with motion disabled when reduced motion is preferred.
 
-WithSubtitles uses the `nrk:media-subtitles` icon from Iconify, embedded locally as SVG. The other project symbols are simple illustrative marks, not official brand logos. WithConverter and whatthefreefont descriptions are provisional portfolio copy and can be refined later.
+WithSubtitles uses `nrk:media-subtitles` and WithConverter uses `fluent:shapes-24-filled` from Iconify, embedded locally as SVG. The typography symbol is a simple illustrative mark, not an official brand logo. WithConverter and whatthefreefont descriptions are provisional portfolio copy and can be refined later.
