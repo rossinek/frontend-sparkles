@@ -30,17 +30,17 @@ main:focus { outline: none; }
   gap: 36px;
   box-shadow: 0 24px 65px -42px #34312655;
 }
-.bio-card { background: #b7a9e0; border-radius: 23px; position: relative; overflow: hidden; display: flex; flex-direction: column; }
+.bio-card { background: #a9c4d5; border-radius: 23px; position: relative; overflow: hidden; display: flex; flex-direction: column; }
 .bio-top { display: flex; align-items: center; gap: 9px; padding: 25px 27px 0; font-size: 13px; font-weight: 550; }
 .tiny-flower { font-size: 25px; line-height: 1; }
 .portrait-scene { height: 332px; position: relative; overflow: hidden; margin-top: 12px; }
-.portrait-circle { position: absolute; width: 265px; height: 265px; border: 1px solid #ffffffa8; border-radius: 50%; background: #d5c7f0; left: 50%; top: 45px; transform: translateX(-50%); }
-.portrait-circle::after { content: ''; position: absolute; inset: 13px; border: 1px solid #ffffff78; border-radius: 50%; }
+.portrait-circle { position: absolute; width: 265px; height: 265px; border-radius: 50%; background: #d6e6ef; left: 50%; top: 45px; transform: translateX(-50%); }
+.portrait-circle::after { content: ''; position: absolute; inset: -13px; border: 5px solid #fff; border-radius: 50%; }
 .portrait { width: 355px; max-width: none; height: 355px; object-fit: contain; position: absolute; bottom: -7px; left: 50%; transform: translateX(-50%); clip-path: circle(44% at 50% 53%); filter: grayscale(.96) contrast(1.05); }
 .portrait-spark { position: absolute; right: 23px; top: 51px; font-size: 49px; font-weight: 400; color: #f7f0d9; transform: rotate(13deg); }
 .bio-copy { padding: 18px 28px 26px; }
-.intro { font-size: 29px; letter-spacing: -1.4px; }
-.bio-copy h1 { font-family: 'Manrope', sans-serif; font-size: clamp(40px, 4.1vw, 56px); letter-spacing: -3px; line-height: 1.12; font-weight: 650; margin: 5px 0 20px; }
+.intro { display: block; font-size: 29px; letter-spacing: -1.4px; line-height: 1.1; }
+.bio-copy h1 { font-family: 'Manrope', sans-serif; font-size: clamp(40px, 4.1vw, 56px); letter-spacing: -3px; line-height: 1.12; font-weight: 800; margin: 1px 0 10px; }
 .name-dot { color: #f8f4ed; }
 .bio-copy p { font-size: 17px; line-height: 1.55; letter-spacing: -.25px; max-width: 270px; margin: 0; }
 .bio-bottom { margin: auto 28px 0; border-top: 1px solid #22232135; padding: 19px 0 22px; display: flex; align-items: center; justify-content: space-between; font-size: 11px; }
@@ -159,7 +159,7 @@ main:focus { outline: none; }
   .portrait-spark { right: 29px; top: 31px; font-size: 44px; }
   .bio-copy { padding: 15px 24px 24px; }
   .intro { font-size: 25px; }
-  .bio-copy h1 { font-size: 48px; margin-bottom: 15px; }
+  .bio-copy h1 { font-size: 48px; margin-bottom: 8px; }
   .bio-copy p { font-size: 16px; max-width: 290px; }
   .bio-bottom { margin: 0 24px; font-size: 11px; }
   .work-header { padding: 0 5px 22px; }
