@@ -28,6 +28,6 @@ pnpm preview
 - `src/style.css`: responsive layout and styling.
 - `public/artur-rosa.png`: supplied portrait; the near-monochrome filter is applied in CSS.
 
-Vue Router uses hash routing so all pages can be opened directly on simple static hosting without server rewrite rules. Unknown routes return to the portfolio. There are no animations or page-transition effects.
+Vue Router uses hash routing so all pages can be opened directly on simple static hosting without server rewrite rules. Unknown routes return to the portfolio. There are no page-transition effects. Clickable cards have subtle hover effects, with motion disabled when reduced motion is preferred.
 
 Project symbols are simple illustrative marks, not official brand logos. WithConverter and whatthefreefont descriptions are provisional portfolio copy and can be refined later.

@@ -24,7 +24,6 @@ const portraitUrl = `${import.meta.env.BASE_URL}artur-rosa.png`
 
     <section class="work-section" aria-labelledby="work-heading">
       <header class="work-header">
-        <div class="eyebrow"><span class="status-dot"></span> A few things I've been building</div>
         <h2 id="work-heading">Selected work<span class="heading-arrow" aria-hidden="true">↗</span></h2>
       </header>
       <div class="project-grid">
@@ -40,14 +39,10 @@ const portraitUrl = `${import.meta.env.BASE_URL}artur-rosa.png`
 
         <nav class="social-stack" aria-label="Find me online">
           <a class="social-card x-card" href="https://x.com/rosickeyy" target="_blank" rel="noopener noreferrer" aria-label="Artur Rosa on X (opens in a new tab)">
-            <ArrowIcon class="social-arrow" />
             <svg class="social-symbol" viewBox="0 0 24 24" aria-hidden="true"><path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.64 7.584H.47l8.6-9.835L0 1.154h7.594l5.243 6.932 6.064-6.933ZM17.61 20.644h2.039L6.486 3.24H4.298L17.61 20.644Z" fill="currentColor" /></svg>
-            <span>Let's connect</span>
           </a>
           <a class="social-card website-card" href="https://arturrosa.pl" target="_blank" rel="noopener noreferrer" aria-label="Visit arturrosa.pl (opens in a new tab)">
-            <ArrowIcon class="social-arrow" />
             <svg class="social-symbol globe" viewBox="0 0 48 48" fill="none" aria-hidden="true"><circle cx="24" cy="24" r="19" /><ellipse cx="24" cy="24" rx="8" ry="19" /><path d="M5 24h38M9 13h30M9 35h30" /></svg>
-            <span>arturrosa.pl</span>
           </a>
         </nav>
 
@@ -63,7 +58,6 @@ const portraitUrl = `${import.meta.env.BASE_URL}artur-rosa.png`
           <div class="card-bottom"><div><h3>whatthefreefont<span class="domain-suffix">.com</span></h3><p>{{ projects[2].label }}</p></div></div>
         </RouterLink>
       </div>
-      <footer class="work-footer"><span>Small tools. Thoughtfully made.</span><span>Artur Rosa © {{ new Date().getFullYear() }}</span></footer>
     </section>
   </main>
 </template>
