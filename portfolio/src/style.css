@@ -59,7 +59,7 @@ main:focus { outline: none; }
 .subtitle-art { position: relative; margin: 29px 0 24px; padding-left: 6px; }
 .caption-line { font-family: 'Manrope', sans-serif; width: fit-content; font-size: clamp(25px, 2.7vw, 38px); line-height: 1.25; font-weight: 800; letter-spacing: -1.5px; }
 .caption-highlight { background: #fdf8e9; border-radius: 6px; padding: 1px 9px 4px; margin-top: 7px; transform: rotate(-3deg); }
-.caption-icon { position: absolute; right: 9px; top: 7px; width: 77px; height: 77px; color: #b65b3a; }
+.caption-icon { position: absolute; right: 31px; top: 50%; width: 77px; height: 77px; color: #b65b3a; transform: translateY(-50%) rotate(8deg); }
 .card-bottom { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: auto; }
 .card-bottom h3 { font-size: 19px; font-weight: 650; letter-spacing: -.65px; margin: 0 0 5px; overflow-wrap: anywhere; }
 .card-bottom p { font-size: 11px; margin: 0; opacity: .72; }
@@ -113,7 +113,7 @@ main:focus { outline: none; }
   .project-grid { gap: 13px; grid-template-columns: minmax(0, 1fr) minmax(0, .7fr) 115px; }
   .project-card { padding: 18px; }
   .card-bottom h3 { font-size: 17px; }
-  .caption-icon { right: -3px; width: 59px; height: 59px; top: 18px; }
+  .caption-icon { right: 18px; width: 59px; height: 59px; }
   .small-card-art { gap: 3px; }
   .format-chip { display: none; }
   .bio-copy { padding-left: 23px; padding-right: 23px; }
@@ -137,7 +137,7 @@ main:focus { outline: none; }
   .bio-bottom { grid-column: 1; grid-row: 3; margin-left: 24px; margin-right: 0; font-size: 10px; }
   .work-header h2 { font-size: 48px; }
   .caption-line { font-size: 31px; }
-  .caption-icon { right: 12px; width: 70px; height: 70px; top: 7px; }
+  .caption-icon { right: 30px; width: 70px; height: 70px; }
   .detail-shell { width: calc(100% - 48px); margin: 24px auto; padding: 28px; }
   .detail-content { grid-template-columns: 1fr; gap: 35px; }
   .detail-art { height: 310px; }
@@ -163,7 +163,7 @@ main:focus { outline: none; }
   .project-grid { grid-template-columns: minmax(0, 1fr) 72px; gap: 13px; }
   .subtitles-card { grid-column: 1; min-height: 290px; padding: 18px; }
   .caption-line { font-size: clamp(19px, 5.5vw, 28px); letter-spacing: -.9px; }
-  .caption-icon { right: 0; top: 98px; width: 37px; height: 37px; }
+  .caption-icon { right: 18px; width: 37px; height: 37px; }
   .social-stack { grid-column: 2; grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
   .social-card { padding: 12px; }
   .subtitles-card .card-category { font-size: 9px; }

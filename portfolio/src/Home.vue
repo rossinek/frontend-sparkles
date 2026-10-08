@@ -32,8 +32,8 @@ const portraitUrl = `${import.meta.env.BASE_URL}artur-rosa.png`
           <div class="subtitle-art" aria-hidden="true">
             <div class="caption-line">Good stories.</div>
             <div class="caption-line caption-highlight">Every word.</div>
-            <ProjectMark kind="subtitles" class="caption-icon" />
           </div>
+          <ProjectMark kind="subtitles" class="caption-icon" />
           <div class="card-bottom"><div><h3>WithSubtitles</h3><p>{{ projects[0].label }}</p></div></div>
         </RouterLink>
 
