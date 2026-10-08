@@ -1,6 +1,6 @@
-# Portfolio
+# Particle Flip
 
-A small Vue portfolio for Artur Rosa, inspired by a colorful card-based layout. This is the starting point for a future page-transition experiment.
+A page-transition experiment: a textured card breaks into particles, twists with spring motion and inertia in 3D, and reforms as the next page. Built with Vue and Three.js; a small portfolio for Artur Rosa provides the demo content.
 
 ## Run Locally
 

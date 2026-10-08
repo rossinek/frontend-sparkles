@@ -21,4 +21,4 @@ Open a static project's HTML file in a browser, or follow the setup instructions
 
 ## Experiments
 
-- [Portfolio](./portfolio/README.md): a Vue portfolio with three project pages, a portrait, and simple routing. A foundation for future page-transition experiments.
+- [Particle Flip](./particle-flip/README.md): a Three.js page-transition experiment where a card breaks into particles, twists in 3D, and reforms as the next page. A Vue portfolio provides the demo content.
