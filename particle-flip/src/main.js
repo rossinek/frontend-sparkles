@@ -9,12 +9,12 @@ import './style.css'
 const router = createRouter({
   history: createWebHashHistory(),
   routes: [
-    { path: '/', component: Home, meta: { title: 'Artur Rosa — Indie maker' } },
+    { path: '/', component: Home, meta: { title: 'Particle Flip — Frontend Sparkles' } },
     ...projects.map(project => ({
       path: `/projects/${project.slug}`,
       component: Project,
       props: { project },
-      meta: { title: `${project.name} — Artur Rosa` },
+      meta: { title: `${project.name} — Particle Flip` },
     })),
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],

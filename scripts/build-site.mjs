@@ -16,6 +16,7 @@ for (const experiment of experiments) {
 }
 await rm(output, { recursive: true, force: true })
 await mkdir(output, { recursive: true })
+await cp(resolve(root, 'public'), output, { recursive: true })
 for (const experiment of experiments) {
   const directory = resolve(root, experiment.slug)
   if (experiment.type === 'pnpm') {
