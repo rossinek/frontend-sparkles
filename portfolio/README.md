@@ -39,3 +39,5 @@ The charcoal page background smoothly darkens during the transition and returns 
 At widths up to 850px, the stacked layout turns around the vertical axis, with the top edge leading. Compact layouts use matching viewport-based card heights for the home and project pages; phones keep the portrait beside the bio and the two smaller project cards in one row. Very short viewports can still scroll rather than clipping essential content.
 
 WithSubtitles uses `nrk:media-subtitles` and WithConverter uses `fluent:shapes-24-filled` from Iconify, embedded locally as SVG. The typography symbol is a simple illustrative mark, not an official brand logo. WithConverter and whatthefreefont descriptions are provisional portfolio copy and can be refined later.
+
+The cards use a balanced blend of the [Pastel and Muted pastel palettes from Colormapped](https://colormapped.com/palettes/pastel/): powder blue, blush, mint, lavender, and peach. WithConverter retains its charcoal background. Palette values are defined as CSS variables in `src/style.css`.
