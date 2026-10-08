@@ -2,7 +2,7 @@ export const projects = [
   {
     slug: 'withsubtitles',
     name: 'WithSubtitles',
-    label: 'Give your videos a voice.',
+    label: 'Your words, made visible.',
     category: 'Video & captions',
     description: 'Automatic captions for short-form videos. WithSubtitles helps put your words on screen, so your story can be understood with or without sound.',
     url: 'https://withsubtitles.com',
