@@ -19,4 +19,6 @@ See [AGENTS.md](./AGENTS.md) for the repository guidelines.
 
 Open a static project's HTML file in a browser, or follow the setup instructions in a pnpm project's directory.
 
-No experiments have been added yet.
+## Experiments
+
+- [Portfolio](./portfolio/README.md): a Vue portfolio with three project pages, a portrait, and simple routing. A foundation for future page-transition experiments.
