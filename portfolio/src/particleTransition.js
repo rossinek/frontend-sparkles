@@ -27,12 +27,7 @@ const vertexShader = `
   float ease(float t) { return t * t * (3.0 - 2.0 * t); }
   float phase(float a, float b) { return clamp((progress - a) / (b - a), 0.0, 1.0); }
 
-  void main() {
-    // Wide layouts lead with the right edge; stacked layouts lead with the top.
-    float leadingEdge = mix(particleUV.x, 1.0 - particleUV.y, verticalTurn);
-    float local = clamp((progress - 0.04 - (1.0 - leadingEdge) * 0.12) / 0.84, 0.0, 1.0);
-    float turn = ease(local);
-    // The edge winds back slightly, releases, overshoots 180 degrees and rebounds.
+  float springAt(float local) {
     float windup = ease(clamp(local / 0.04, 0.0, 1.0));
     float release = clamp((local - 0.04) / 0.96, 0.0, 1.0);
     float spring = -0.02 * windup;
@@ -40,11 +35,26 @@ const vertexShader = `
       spring = 1.0 - 1.02 * exp(-7.5 * release)
         * (cos(9.5 * release) + (7.5 / 9.5) * sin(9.5 * release));
     }
-    // Blend out the final tiny residual without an abrupt stop.
-    spring = mix(spring, 1.0, ease(clamp((local - 0.9) / 0.1, 0.0, 1.0)));
-    float angle = 3.14159265 * spring;
+    return mix(spring, 1.0, ease(clamp((local - 0.9) / 0.1, 0.0, 1.0)));
+  }
+
+  void main() {
+    // Wide layouts lead with the right edge; stacked layouts lead with the top.
+    float leadingEdge = mix(particleUV.x, 1.0 - particleUV.y, verticalTurn);
+    float local = clamp((progress - 0.04 - (1.0 - leadingEdge) * 0.12) / 0.84, 0.0, 1.0);
+    float turn = ease(local);
     float settle = ease(phase(0.35, 0.91));
     float spread = ease(phase(0.0, 0.30)) * (1.0 - ease(phase(0.30, 0.88)));
+    // Sample an earlier spring position instead of extrapolating velocity.
+    // Some dots follow the card while others retain a short history of its motion.
+    float lagWeight = pow(particleNoise.z * 0.5 + 0.5, 2.0);
+    // The leading edge stretches more; the trailing edge stays relatively tight.
+    // Use local timing so the earlier-moving right edge does not miss the effect.
+    float inertia = ease(clamp((local - 0.08) / 0.14, 0.0, 1.0)) * spread
+      * (1.0 - ease(phase(0.62, 0.82)));
+    float edgeDelay = mix(0.0175, 0.0475, ease(leadingEdge));
+    float delayedLocal = max(0.0, local - edgeDelay * lagWeight * inertia / 0.84);
+    float angle = 3.14159265 * springAt(delayedLocal);
 
     float width = mix(sourceRect.z, targetRect.z, settle);
     // Heights change column by column while the surface is bending.
@@ -150,29 +160,6 @@ const shadowFragmentShader = `
   }
 `
 
-const closeShadowVertexShader = vertexShader
-  .replace('varying vec2 dotUV;', 'varying vec2 dotUV; varying vec2 silhouetteUV; varying vec3 silhouetteShape;')
-  .replace('viewPoint.xy += position.xy * size;', `
-    silhouetteUV = particleUV;
-    silhouetteShape = vec3(width, height, radius);
-    viewPoint.xy += vec2(0.0, -7.0);
-    viewPoint.z -= 12.0;
-  `)
-const closeShadowFragmentShader = `
-  uniform float opacity;
-  uniform float progress;
-  varying vec2 silhouetteUV;
-  varying vec3 silhouetteShape;
-  void main() {
-    vec2 p = (silhouetteUV - 0.5) * silhouetteShape.xy;
-    vec2 q = abs(p) - silhouetteShape.xy * 0.5 + silhouetteShape.z;
-    float edge = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - silhouetteShape.z;
-    float softness = 1.0 - smoothstep(-85.0, 110.0, edge);
-    float envelope = smoothstep(0.0, 0.16, progress) * (1.0 - smoothstep(0.82, 1.0, progress));
-    gl_FragColor = vec4(0.0, 0.0, 0.0, softness * opacity * envelope * 0.055);
-  }
-`
-
 function measure(card) {
   const rect = card.getBoundingClientRect()
   return {
@@ -223,26 +210,6 @@ export class ParticleTransition {
     this.shadow.frustumCulled = false
     this.shadow.renderOrder = -2
     this.scene.add(this.shadow)
-    this.closeShadowMaterial = new THREE.ShaderMaterial({
-      vertexShader: closeShadowVertexShader,
-      fragmentShader: closeShadowFragmentShader,
-      uniforms: this.material.uniforms,
-      transparent: true, depthWrite: false, depthTest: false, side: THREE.DoubleSide,
-    })
-    const closeGeometry = new THREE.PlaneGeometry(1, 1, 100, 50)
-    const count = closeGeometry.attributes.position.count
-    const coordinates = new Float32Array(count * 2)
-    for (let i = 0; i < count; i++) {
-      coordinates[i * 2] = closeGeometry.attributes.uv.getX(i) * 1.40 - 0.20
-      coordinates[i * 2 + 1] = closeGeometry.attributes.uv.getY(i) * 1.40 - 0.20
-    }
-    closeGeometry.setAttribute('particleUV', new THREE.BufferAttribute(coordinates, 2))
-    closeGeometry.setAttribute('particleNoise', new THREE.BufferAttribute(new Float32Array(count * 3), 3))
-    closeGeometry.setAttribute('particleLayer', new THREE.BufferAttribute(new Float32Array(count), 1))
-    this.closeShadow = new THREE.Mesh(closeGeometry, this.closeShadowMaterial)
-    this.closeShadow.frustumCulled = false
-    this.closeShadow.renderOrder = -1
-    this.scene.add(this.closeShadow)
     host.append(this.renderer.domElement)
     this.handleResize = () => this.stop()
     window.addEventListener('resize', this.handleResize)
@@ -378,11 +345,13 @@ export class ParticleTransition {
         // Orbit the card's center while retaining the original off-center framing.
         this.camera.rotation.set(-elevationAngle, -orbitAngle, 0, 'YXZ')
         this.material.uniforms.progress.value = t
-        this.material.uniforms.opacity.value = Math.min(t / 0.06, 1)
-        this.clone.style.opacity = String(1 - Math.min(t / 0.07, 1))
+        this.material.uniforms.opacity.value = 1
         if (t > 0.99 && !revealed) { revealed = true; reveal() }
         this.renderer.domElement.style.opacity = String(1 - Math.max((t - 0.99) / 0.01, 0))
         this.renderer.render(this.scene, this.camera)
+        // The first rendered frame is the intact textured card. Hand it over
+        // immediately so a fading DOM copy cannot leave a stationary white rim.
+        this.clone?.remove()
         if (t < 1) this.raf = requestAnimationFrame(frame)
         else this.stop()
       }
@@ -405,8 +374,6 @@ export class ParticleTransition {
     this.mesh?.geometry.dispose()
     this.shadow.geometry.dispose()
     this.shadowMaterial.dispose()
-    this.closeShadow.geometry.dispose()
-    this.closeShadowMaterial.dispose()
     this.material.uniforms.sourceTexture.value?.dispose()
     this.material.uniforms.destinationTexture.value?.dispose()
     this.material.dispose()

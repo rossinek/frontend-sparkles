@@ -2,16 +2,17 @@
 import { projects } from './projects'
 import ProjectMark from './components/ProjectMark.vue'
 import ArrowIcon from './components/ArrowIcon.vue'
+import AsteriskIcon from './components/AsteriskIcon.vue'
 const portraitUrl = `${import.meta.env.BASE_URL}artur-rosa.png`
 </script>
 
 <template>
   <main class="portfolio-shell" tabindex="-1">
     <section class="bio-card" aria-labelledby="bio-heading">
-      <div class="bio-top"><span class="tiny-flower" aria-hidden="true">✳</span><span>A little about me</span></div>
+      <div class="bio-top"><span class="tiny-flower" aria-hidden="true"><AsteriskIcon /></span><span>A little about me</span></div>
       <div class="portrait-scene">
         <div class="portrait-circle"></div>
-        <span class="portrait-spark" aria-hidden="true">✳</span>
+        <span class="portrait-spark" aria-hidden="true"><AsteriskIcon /></span>
         <img class="portrait" :src="portraitUrl" alt="Artur Rosa, wearing glasses and looking to the left" />
       </div>
       <div class="bio-copy">
@@ -30,8 +31,8 @@ const portraitUrl = `${import.meta.env.BASE_URL}artur-rosa.png`
         <RouterLink :to="`/projects/${projects[0].slug}`" class="project-card subtitles-card" aria-label="Explore WithSubtitles">
           <div class="card-top"><span class="card-category">01 / Video & captions</span><ArrowIcon /></div>
           <div class="subtitle-art" aria-hidden="true">
-            <div class="caption-line">Good stories.</div>
-            <div class="caption-line caption-highlight">Every word.</div>
+            <div class="caption-line">Auto captions.</div>
+            <div class="caption-line caption-highlight">For free.</div>
           </div>
           <ProjectMark kind="subtitles" class="caption-icon" />
           <div class="card-bottom"><div><h3>WithSubtitles</h3><p>{{ projects[0].label }}</p></div></div>
