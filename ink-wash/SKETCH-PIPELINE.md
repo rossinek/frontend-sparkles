@@ -146,7 +146,7 @@ Split by what each side is good at.
 - **Main thread (`src/engine/attention.js`).** UniSal through LiteRT.js on its WASM backend. LiteRT.js calls `importScripts`, which module workers do not have, so it cannot live in the worker. Its runtime is loaded from jsDelivr rather than bundled (37 MB).
 - **CPU, low resolution (`src/engine/guides.js`).** Everything that needs percentiles, a median, or wide blurs, on a 512px grid: `dark`, `shade`, `focus`, both direction fields, coherence, and the shading side `n`. Uploaded as three float textures. The median runs directly on the grid (7×7 there covers about the same area as the reference's window).
 - **GPU, full resolution (`HATCH` in `src/engine/shaders.js`).** The contour band (14 taps of the line texture along `-n`) and the strokes. Each pixel evaluates only its own snapped direction, so a pass is one stroke evaluation, not eight. Rendered into its own `pencil` texture (R: all graphite, G: contours alone) and again whenever a slider moves.
-- **Composite.** Reads the pencil texture; ink reinforces the contours only. The `sketch` texture keeps its smoothed luminance and edge strength for the ink fronts, and its edge-detection lines for the background and as the fallback.
+- **Composite.** Reads the pencil texture; ink reinforces the contours only. The wash is never thinned for the pencil. Instead the pencil darkens once the ink soaks it: a deep graphite under a light wash, close to black and up to 1.9 times heavier under a dark one, which is the only way it can stay darker than the ink beside it. The `sketch` texture keeps its smoothed luminance and edge strength for the ink fronts, and its edge-detection lines for the background and as the fallback.
 
 Differences from the reference:
 

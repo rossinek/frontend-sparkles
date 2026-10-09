@@ -351,7 +351,12 @@ void main() {
 
   float inkLine = max(lead.g, sketch.r * (1.0 - subject)) * cover * mix(0.3, 1.0, inkMatte) * (0.4 + 0.6 * settle);
   painted *= mix(vec3(1.0), vec3(0.2, 0.14, 0.1), inkLine * 0.75);
-  painted *= mix(vec3(1.0), vec3(0.24, 0.21, 0.19), pencil * (1.0 - 0.6 * cover));
+  // Pencil darkens once the ink soaks it. The wash itself is untouched. In a light wash the
+  // strokes turn a deep graphite; in a dark one they go fully black and heavier, which is
+  // the only way left to stay darker than the ink beside them.
+  float deepWash = smoothstep(0.5, 1.2, density);
+  vec3 graphiteTint = mix(vec3(0.24, 0.21, 0.19), mix(vec3(0.1, 0.085, 0.075), vec3(0.02, 0.016, 0.013), deepWash), cover);
+  painted *= mix(vec3(1.0), graphiteTint, min(pencil * mix(1.0, mix(1.0, 1.9, deepWash), cover), 1.0));
   painted *= mix(vec3(1.0), sepia * 0.5, splatter(p) * 0.9 * (1.0 - uSketchOnly));
 
   vec3 col = mix(film, painted, paperMask);
