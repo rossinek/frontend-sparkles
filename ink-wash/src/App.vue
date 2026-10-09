@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { createRenderer, durationFor, WIDE, WORK_SIZE } from './engine/renderer.js'
 import { effective, MAX_ROTATION, MAX_SCALE } from './engine/framing.js'
 import { attention } from './engine/attention.js'
+import PanelSection from './components/PanelSection.vue'
 
 const canvas = ref(null)
 const fileInput = ref(null)
@@ -308,131 +309,144 @@ onBeforeUnmount(() => {
         <h1>Ink Wash</h1>
         <p>A photo becomes a pencil sketch on aged paper, then fills with spreading ink.</p>
       </div>
-      <button class="primary" type="button" :disabled="unsupported" @click="fileInput.click()">Use your photo</button>
-      <input ref="fileInput" type="file" accept="image/*" hidden @change="pick">
     </header>
 
-    <section class="stage">
-      <div class="frame">
-        <canvas
-          ref="canvas"
-          width="1600"
-          height="1006"
-          @pointerdown="press"
-          @pointermove="drag"
-          @pointerup="release"
-          @pointercancel="release"
-        ></canvas>
-        <p v-if="status" class="status" role="status">{{ status }}</p>
+    <div class="workspace">
+      <div class="viewer">
+        <section class="stage">
+          <div class="frame">
+            <canvas
+              ref="canvas"
+              width="1600"
+              height="1006"
+              @pointerdown="press"
+              @pointermove="drag"
+              @pointerup="release"
+              @pointercancel="release"
+            ></canvas>
+            <p v-if="status" class="status" role="status">{{ status }}</p>
+          </div>
+          <p class="drop-hint">Drop the photo to paint it</p>
+        </section>
+
+        <footer class="controls">
+          <button class="icon" type="button" :disabled="!ready" :aria-label="playing ? 'Pause' : 'Play'" @click="toggle">
+            <svg v-if="playing" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z" /></svg>
+            <svg v-else viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5l11 7-11 7z" /></svg>
+          </button>
+          <input
+            class="scrubber"
+            type="range"
+            min="0"
+            :max="duration"
+            step="0.01"
+            :value="time"
+            :disabled="!ready"
+            :style="{ '--progress': progress }"
+            aria-label="Animation position"
+            @input="scrub"
+          >
+          <button type="button" :disabled="!ready" @click="replay">Replay</button>
+        </footer>
       </div>
-      <p class="drop-hint">Drop the photo to paint it</p>
-    </section>
 
-    <footer class="controls">
-      <button class="icon" type="button" :disabled="!ready" :aria-label="playing ? 'Pause' : 'Play'" @click="toggle">
-        <svg v-if="playing" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z" /></svg>
-        <svg v-else viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5l11 7-11 7z" /></svg>
-      </button>
-      <input
-        class="scrubber"
-        type="range"
-        min="0"
-        :max="duration"
-        step="0.01"
-        :value="time"
-        :disabled="!ready"
-        :style="{ '--progress': progress }"
-        aria-label="Animation position"
-        @input="scrub"
-      >
-      <button type="button" :disabled="!ready" @click="replay">Replay</button>
-      <button type="button" :disabled="!ready" @click="reshuffle">New pour</button>
-      <button type="button" :disabled="!ready" :aria-pressed="colour" @click="toggleColour">Colour</button>
-    </footer>
+      <aside class="panel" aria-label="Options">
+        <button class="primary wide" type="button" :disabled="unsupported" @click="fileInput.click()">Replace photo</button>
+        <input ref="fileInput" type="file" accept="image/*" hidden @change="pick">
+        <div class="panel-actions">
+          <button type="button" :disabled="!ready" @click="reshuffle">New pour</button>
+          <button type="button" :disabled="!ready" :aria-pressed="colour" @click="toggleColour">Colour</button>
+        </div>
 
-    <div class="sketch-controls">
-      <label>
-        <span>Hatching</span>
-        <input
-          class="scrubber"
-          type="range"
-          min="0"
-          max="1"
-          step="0.01"
-          :value="hatching"
-          :disabled="!ready"
-          :style="{ '--progress': `${hatching * 100}%` }"
-          @input="setHatching"
-          @change="endSketchPreview"
-          @blur="endSketchPreview"
-        >
-      </label>
-      <label>
-        <span>Focus</span>
-        <input
-          class="scrubber"
-          type="range"
-          min="0"
-          max="1"
-          step="0.01"
-          :value="focus"
-          :disabled="!ready"
-          :style="{ '--progress': `${focus * 100}%` }"
-          @input="setFocus"
-          @change="endSketchPreview"
-          @blur="endSketchPreview"
-        >
-      </label>
-    </div>
+        <PanelSection title="Sketch">
+          <label class="field">
+            <span class="field-head"><span>Hatching</span><output>{{ Math.round(hatching * 100) }}%</output></span>
+            <input
+              class="scrubber"
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              :value="hatching"
+              :disabled="!ready"
+              :style="{ '--progress': `${hatching * 100}%` }"
+              @input="setHatching"
+              @change="endSketchPreview"
+              @blur="endSketchPreview"
+            >
+            <small>How much pencil shading is drawn; at zero only the outlines remain.</small>
+          </label>
+          <label class="field">
+            <span class="field-head"><span>Focus</span><output>{{ Math.round(focus * 100) }}%</output></span>
+            <input
+              class="scrubber"
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              :value="focus"
+              :disabled="!ready"
+              :style="{ '--progress': `${focus * 100}%` }"
+              @input="setFocus"
+              @change="endSketchPreview"
+              @blur="endSketchPreview"
+            >
+            <small>How strongly the shading thins out where the eye is drawn.</small>
+          </label>
+        </PanelSection>
 
-    <div class="sketch-controls">
-      <label>
-        <span>Rotate</span>
-        <input
-          class="scrubber centred"
-          type="range"
-          :min="-MAX_ROTATION"
-          :max="MAX_ROTATION"
-          step="0.5"
-          :value="rotation"
-          :disabled="!ready"
-          :style="{ '--progress': `${((rotation + MAX_ROTATION) / (2 * MAX_ROTATION)) * 100}%` }"
-          @input="setRotation"
-          @change="endPlanning"
-          @blur="endPlanning"
-        >
-        <output>{{ rotation.toFixed(1) }}°</output>
-      </label>
-      <label>
-        <span>Scale</span>
-        <input
-          class="scrubber"
-          type="range"
-          :min="scaleRange.min"
-          :max="scaleRange.max"
-          step="0.005"
-          :value="scaleRange.value"
-          :disabled="!ready"
-          :style="{ '--progress': scaleRange.progress }"
-          @input="setScale"
-          @change="endPlanning"
-          @blur="endPlanning"
-        >
-        <output>{{ framing.scale.toFixed(2) }}×</output>
-      </label>
-      <label class="compact">
-        <span>Motion</span>
-        <select :value="motion" :disabled="!ready" @change="setMotion">
-          <option value="rhythmic">Rhythmic</option>
-          <option value="smooth">Smooth</option>
-          <option value="rapid">Rapid</option>
-        </select>
-      </label>
-      <button type="button" :disabled="!ready || !framed" @click="resetFrame">Reset frame</button>
+        <PanelSection title="Rotate &amp; Scale">
+          <template #actions>
+            <button v-if="ready && framed" class="icon-quiet" type="button" aria-label="Reset frame" title="Reset frame" @click="resetFrame">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 1.45-4.59M5 3.5v4h4" /></svg>
+            </button>
+          </template>
+          <p class="section-note">Where the photo ends up once the paper has covered it and the camera moves. Drag the picture to place it.</p>
+          <label class="field">
+            <span class="field-head"><span>Rotate</span><output>{{ rotation.toFixed(1) }}°</output></span>
+            <input
+              class="scrubber"
+              type="range"
+              :min="-MAX_ROTATION"
+              :max="MAX_ROTATION"
+              step="0.5"
+              :value="rotation"
+              :disabled="!ready"
+              :style="{ '--progress': `${((rotation + MAX_ROTATION) / (2 * MAX_ROTATION)) * 100}%` }"
+              @input="setRotation"
+              @change="endPlanning"
+              @blur="endPlanning"
+            >
+          </label>
+          <label class="field">
+            <span class="field-head"><span>Scale</span><output>{{ framing.scale.toFixed(2) }}×</output></span>
+            <input
+              class="scrubber"
+              type="range"
+              :min="scaleRange.min"
+              :max="scaleRange.max"
+              step="0.005"
+              :value="scaleRange.value"
+              :disabled="!ready"
+              :style="{ '--progress': scaleRange.progress }"
+              @input="setScale"
+              @change="endPlanning"
+              @blur="endPlanning"
+            >
+          </label>
+          <label class="field inline">
+            <span>Motion</span>
+            <select :value="motion" :disabled="!ready" @change="setMotion">
+              <option value="rhythmic">Rhythmic</option>
+              <option value="smooth">Smooth</option>
+              <option value="rapid">Rapid</option>
+            </select>
+          </label>
+        </PanelSection>
+      </aside>
     </div>
 
     <p class="note">
-      <template v-if="ready">Drag the picture to place it in the final frame. </template>
       Everything runs in your browser; the photo is never uploaded.
       <template v-if="isSample">Sample photo by Toni Hukkanen (CC0).</template>
     </p>

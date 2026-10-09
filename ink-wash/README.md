@@ -22,7 +22,7 @@ pnpm preview
 
 ## Controls
 
-- **Use your photo** or drag and drop an image onto the page.
+- **Replace photo** or drag and drop an image onto the page.
 - **Play / pause** with the button, a click on the picture, or the space bar. The scrubber seeks anywhere in the animation.
 - **New pour** keeps the photo but picks new starting points and paper.
 - **Colour** tints the ink with the photo's own hues instead of plain sepia.

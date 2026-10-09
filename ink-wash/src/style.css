@@ -22,10 +22,10 @@ body {
 
 .app {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto auto auto auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 16px;
   height: 100%;
-  max-width: 1320px;
+  max-width: 1560px;
   margin: 0 auto;
   padding: 20px 24px 14px;
 }
@@ -99,7 +99,7 @@ button.icon svg { width: 18px; height: 18px; fill: currentColor; }
 canvas {
   display: block;
   max-width: 100%;
-  max-height: calc(100dvh - 292px);
+  max-height: calc(100dvh - 200px);
   background: #000;
   cursor: pointer;
 }
@@ -141,22 +141,165 @@ canvas {
   gap: 10px;
 }
 
-.sketch-controls {
-  display: flex;
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
   gap: 28px;
+  min-height: 0;
 }
 
-.sketch-controls output {
-  flex: none;
-  width: 3.4em;
-  color: var(--text);
+/* One column as wide as the picture, so the transport sits right under it at its width.
+   Picture and transport are centred together in the space left of the panel. */
+.viewer {
+  display: grid;
+  grid-template-columns: fit-content(100%);
+  place-content: center;
+  gap: 12px;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* The options: a few general actions, then sections that fold away. */
+.panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.panel > button.wide { margin-bottom: 10px; padding-block: 13px; }
+
+.panel-actions {
+  display: flex;
+  gap: 10px;
+  padding-bottom: 16px;
+}
+
+.panel-actions button { flex: 1; }
+
+.panel-section { border-top: 1px solid rgb(80 87 79 / 0.55); }
+
+.panel-section h2 { margin: 0; font: inherit; }
+
+.panel-head { position: relative; }
+
+.panel-head-actions {
+  position: absolute;
+  top: 50%;
+  right: 22px;
+  display: flex;
+  transform: translateY(-50%);
+}
+
+.panel-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 14px 2px;
+  font-size: 12px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  background: none;
+  border: 0;
+  border-radius: 4px;
+}
+
+.panel-toggle svg {
+  width: 10px;
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1.5;
+  transform: rotate(-90deg);
+  transition: transform 0.28s ease;
+}
+
+.expanded .panel-toggle svg { transform: none; }
+.panel-toggle:hover svg { stroke: var(--accent); }
+
+.panel-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows 0.28s ease, opacity 0.2s ease;
+}
+
+.expanded .panel-body {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.panel-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Padding lives on the ends of the content, so a folded section really is zero tall. */
+.panel-content > :first-child { margin-top: 2px; }
+.panel-content > :last-child { margin-bottom: 20px; }
+
+.section-note,
+.field small {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 13px;
+}
+
+.field-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.field output {
+  color: var(--muted);
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
-  text-align: right;
 }
 
-.sketch-controls button { padding: 6px 14px; }
+.field input[type='range'] { flex: none; margin: 0; }
 
-.sketch-controls label.compact { flex: none; }
+.field.inline {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+button.icon-quiet {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  border-radius: 50%;
+}
+
+button.icon-quiet:hover:not(:disabled) { color: var(--accent); }
+
+button.icon-quiet svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 
 select {
   padding: 6px 30px 6px 14px;
@@ -176,16 +319,6 @@ select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 select:disabled { opacity: 0.4; cursor: default; }
 
 canvas { touch-action: none; }
-
-.sketch-controls label {
-  display: flex;
-  flex: 1;
-  align-items: center;
-  gap: 8px;
-  color: var(--muted);
-  font-size: 13px;
-  white-space: nowrap;
-}
 
 .scrubber {
   flex: 1;
@@ -225,11 +358,19 @@ canvas { touch-action: none; }
   text-align: center;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .panel-body, .panel-toggle svg { transition: none; }
+}
+
+@media (max-width: 900px) {
+  html, body, #app { height: auto; }
+  .app { height: auto; min-height: 100dvh; }
+  .workspace { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .panel { overflow: visible; }
+  canvas { max-height: 70dvh; }
+}
+
 @media (max-width: 640px) {
   .app { padding: 14px 14px 10px; gap: 12px; }
   .top p { display: none; }
-  .controls { flex-wrap: wrap; justify-content: center; }
-  .scrubber { flex-basis: calc(100% - 70px); }
-  .sketch-controls { flex-direction: column; gap: 4px; }
-  canvas { max-height: calc(100dvh - 420px); }
 }
