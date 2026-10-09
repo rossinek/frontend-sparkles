@@ -82,9 +82,9 @@ export const HATCH = `#version 300 es
 precision highp float;
 in vec2 vUv;
 out vec4 outColor;
-uniform sampler2D uLine, uMatte, uTone, uField, uSide;
+uniform sampler2D uLine, uMatte, uTone, uField, uSide, uSheet;
 uniform vec2 uSize;
-uniform float uUnit, uHatching, uFocus, uSeed;
+uniform float uUnit, uHatching, uFocus, uSeed, uPad, uWide, uFade;
 
 const float PI = 3.14159265;
 
@@ -130,11 +130,22 @@ float strokes(vec2 px, float angle, float spacing, float len, float seed, float 
 }
 
 void main() {
-  vec2 px = vec2(vUv.x, 1.0 - vUv.y) * uSize; // image coordinates, y down, as the guides use
-  float subject = smoothstep(0.3, 0.7, texture(uMatte, vUv).r);
-  vec4 tone = texture(uTone, vUv);
-  vec4 field = texture(uField, vUv);
-  vec4 side = texture(uSide, vUv);
+  // uPad > 1 draws a wider sheet around the frame. Lookups past the frame clamp to its edge,
+  // so the hatching carries on at its own angle and is faded out a short way beyond.
+  vec2 fuv = (vUv - 0.5) * uPad + 0.5;
+  vec2 px = vec2(fuv.x, 1.0 - fuv.y) * uSize; // image coordinates, y down, as the guides use
+  float beyond = length(max(max(-fuv, fuv - 1.0), 0.0) * vec2(uSize.x / uSize.y, 1.0));
+  float inset = min(min(fuv.x, 1.0 - fuv.x) * uSize.x / uSize.y, min(fuv.y, 1.0 - fuv.y));
+  float rim = beyond - max(inset, 0.0); // signed distance to the photo's edge, in frame heights
+  float ragged = noise(px / uUnit / 70.0 + 5.0) - 0.5;
+  // The drawing gives out gradually, starting inside the photo, so nothing stops on its edge.
+  // Where contours crowd the photo's edge, the drawing stops sooner, deeper inside.
+  float busy = texture(uSheet, (fuv - 0.5) / uWide + 0.5).a;
+  float trail = mix(1.0, 1.0 - smoothstep(-0.05 - 0.1 * busy, 0.13 - 0.07 * busy, rim + ragged * 0.1), uFade);
+  float subject = smoothstep(0.3, 0.7, texture(uMatte, fuv).r) * trail;
+  vec4 tone = texture(uTone, fuv);
+  vec4 field = texture(uField, fuv);
+  vec4 side = texture(uSide, fuv);
   float dark = tone.r;
   float shade = tone.g;
   float focus = tone.b * uFocus;
@@ -145,7 +156,7 @@ void main() {
   float band = 0.0;
   for (int i = 1; i <= 14; i++) {
     float t = float(i) / 14.0;
-    vec2 at = vUv - back * t;
+    vec2 at = fuv - back * t;
     float line = textureLod(uLine, at, 0.8).r * smoothstep(0.3, 0.7, textureLod(uMatte, at, 1.0).r);
     band = max(band, line * (1.0 - 0.5 * t));
   }
@@ -182,8 +193,9 @@ void main() {
     paper *= 1.0 - 0.42 * layer;
   }
 
-  float edge = smoothstep(0.25, 0.6, textureLod(uMatte, vUv, 1.5).r);
-  float contour = pow(clamp(texture(uLine, vUv).r * 1.6, 0.0, 1.0), 0.85) * edge;
+  float edge = smoothstep(0.25, 0.6, textureLod(uMatte, fuv, 1.5).r);
+  // Contours cannot be invented past the frame; they run straight on and die out quickly.
+  float contour = pow(clamp(texture(uLine, fuv).r * 1.6, 0.0, 1.0), 0.85) * edge * mix(1.0, 1.0 - smoothstep(-0.08 - 0.17 * busy, 0.015 - 0.05 * busy, rim + ragged * 0.06), uFade);
   outColor = vec4(1.0 - (1.0 - 0.9 * contour) * paper, 0.9 * contour, 0.0, 1.0);
 }`
 
@@ -191,12 +203,18 @@ export const COMPOSITE = `#version 300 es
 precision highp float;
 in vec2 vUv;
 out vec4 outColor;
-uniform sampler2D uPhoto, uSketch, uPencil, uMatte, uField, uField2;
+uniform sampler2D uPhoto, uSketch, uPencil, uPencilWide, uMatte, uField, uField2, uSheet;
 uniform vec2 uAspect;
 uniform vec2 uSize;
 // Each front: x = start (s), y = duration (s), z = easing exponent.
 uniform vec3 uPaper, uInk, uAccent;
-uniform float uTint, uSeed, uStage, uZoom, uTime, uSketchOnly;
+uniform float uTint, uSeed, uStage, uTime, uSketchOnly, uPad;
+// The camera: where the photo's centre sits in the viewport, and the rows of the matrix
+// that takes a viewport point (in viewport heights) back onto the photo.
+uniform vec2 uPan, uCamX, uCamY;
+uniform float uGuides; // 0…1: thirds drawn over the photo while the final frame is planned
+// uPull runs 0…1 as the camera moves to the planned frame; uPullStart is when it begins (s).
+uniform float uPull, uPullStart;
 uniform vec2 uLevels;
 
 float hash(vec2 p) {
@@ -244,6 +262,41 @@ float easeIn(float field, vec3 front) {
 float easeOut(float field, vec3 front) {
   return front.x + front.y * (1.0 - pow(1.0 - clamp(field, 0.0, 1.0), 1.0 / front.z));
 }
+// Past the photo the paper is dry and the ink front crawls. Arrival values beyond 1 are
+// spread over a slow tail, so the wash keeps finishing after the frame has pulled back
+// instead of all landing in the same instant.
+float inkArrival(float field) {
+  return easeOut(field, uInk) + 2.6 * (1.0 - exp(-max(field - 1.0, 0.0) * 0.5));
+}
+
+// Blots dropped on the bare sheet around the photo. They are summed into one field
+// before the outline is taken, so drops that touch run together like wet ink: one pool,
+// one wandering scalloped outline, one darker dried rim around the whole of it.
+float blots(vec2 p) {
+  vec2 corner = (0.5 - 0.5 * uPad) * uAspect;
+  vec2 warp = (vec2(fbm(p * 5.0 + 3.0), fbm(p * 5.0 + 11.0)) - 0.5) * 0.11
+    + (vec2(fbm(p * 19.0 + 5.0), fbm(p * 19.0 + 17.0)) - 0.5) * 0.025;
+  float field = 0.0;
+  float tone = 0.0;
+  for (int i = 0; i < 10; i++) {
+    float k = float(i) + uSeed * 5.3;
+    vec2 centre = corner + vec2(hash(vec2(k, 2.1)), hash(vec2(k, 8.7))) * uPad * uAspect;
+    float radius = mix(0.1, 0.26, pow(hash(vec2(k, 5.5)), 1.3));
+    // Each drop lands at its own moment after the pull-back begins and spreads from a point.
+    float born = uPullStart + 0.4 + 2.8 * hash(vec2(k, 6.6));
+    float grown = smoothstep(0.0, 1.0, (uTime - born) / 1.8);
+    if (grown <= 0.0) continue;
+    float d = length(p - centre + warp) / (radius * (0.25 + 0.75 * grown));
+    float reach = exp(-2.2 * d * d) * smoothstep(0.0, 0.25, grown); // at full size: the threshold below at the drop's own radius
+    field += reach;
+    tone += reach * mix(0.04, 0.1, hash(vec2(k, 3.9)));
+  }
+  const float EDGE = 0.111;
+  float pool = smoothstep(EDGE, EDGE * 1.3, field);
+  float rim = pool * (1.0 - smoothstep(EDGE * 1.2, EDGE * 2.4, field));
+  float dried = smoothstep(uPullStart + 2.0, uPullStart + 4.6, uTime); // the rim shows as the pool dries
+  return tone / max(field, 1e-4) * (pool * 0.55 + rim * 0.5 * (0.25 + 0.75 * dried));
+}
 
 // Hard-edged droplets flicked off the brush once the ink is flowing: mostly specks, a few heavy drops.
 float splatter(vec2 p) {
@@ -261,7 +314,8 @@ float splatter(vec2 p) {
 }
 
 void main() {
-  vec2 uv = (vUv - 0.5) / uZoom + 0.5;
+  vec2 view = (vUv - 0.5) * uAspect - uPan;
+  vec2 uv = vec2(dot(uCamX, view), dot(uCamY, view)) / uAspect + 0.5;
   vec2 p = uv * uAspect;
   vec3 photo = texture(uPhoto, uv).rgb;
   if (uStage < 0.5) {
@@ -269,8 +323,27 @@ void main() {
     return;
   }
 
+  // When the camera leaves the photo, uv leaves 0…1. "beyond" is the distance past the photo's
+  // edge in frame heights; the fronts live on a sheet uPad times larger than the photo.
+  float beyond = length(max(max(-uv, uv - 1.0), 0.0) * uAspect);
+  float past = step(1e-5, beyond);
+  float inset = min(min(uv.x, 1.0 - uv.x) * uAspect.x, min(uv.y, 1.0 - uv.y));
+  float rimDistance = beyond - max(inset, 0.0); // signed distance to the photo's edge, in frame heights
+  float soft = fbm(p * 3.0 + uSeed * 6.0) - 0.5;
+  // Detail gives way to plain wash across the edge, starting inside the photo, so the old
+  // rectangle leaves neither a seam nor a line.
+  vec2 sheet = (uv - 0.5) / uPad + 0.5;
+  // What lies past the photo: its tones spread outwards with a blur that grows with
+  // distance (subject, background, matte), and how busy the nearby edge is.
+  vec4 far = texture(uSheet, sheet);
+  // Where contours crowd the edge, detail lets go sooner and deeper inside.
+  // The edge starts to let go just before the frame pulls back, so the extension is already
+  // under way when it comes into view; until then the picture is whole to its edge.
+  float edging = smoothstep(uPullStart - 0.3, uPullStart + 0.4, uTime);
+  float dissolve = smoothstep(-0.08 - 0.15 * far.a, 0.1 - 0.07 * far.a, rimDistance + soft * 0.09) * edging;
+
   vec2 wobble = vec2(fbm(p * 9.0 + uSeed), fbm(p * 9.0 + uSeed + 31.7)) - 0.5;
-  vec4 field = texture(uField, uv + wobble * 0.014 / uAspect);
+  vec4 field = texture(uField, sheet + wobble * 0.014 / uAspect / uPad);
   float fine = fbm(p * 60.0 + uSeed) - 0.5;
   float tooth = noise(uv * uSize * 0.55);
   float pores = noise(uv * uSize * 0.21 + 9.0);
@@ -280,43 +353,53 @@ void main() {
   float paperAge = uTime - easeIn(field.r + fine * 0.03, uPaper);
   // While a sketch slider is dragged, show the finished drawing alone on dry paper.
   if (uSketchOnly > 0.5) paperAge = 10.0;
+  // Past the photo the sheet ages in step with the last paper to arrive at the photo's edge;
+  // otherwise fresh paper inside and aged paper outside draw the old frame as a pale band.
+  if (past > 0.5) paperAge = uTime - (uPaper.x + uPaper.y) + 0.2;
   float paperMask = smoothstep(0.0, 0.035, paperAge);
   float fresh = exp(-max(paperAge, 0.0) / 0.6);
   vec3 freshPaper = vec3(0.99, 0.955, 0.875) * (1.0 - 0.2 * field.a) * (0.97 + 0.03 * tooth);
-  vec3 paper = mix(agedPaper(p, uv, tooth), freshPaper, fresh * 0.92);
+  vec3 paper = mix(agedPaper(p, vUv, tooth), freshPaper, fresh * 0.92);
   float glow = smoothstep(-0.18, 0.0, paperAge);
   vec3 film = mix(photo, vec3(0.99, 0.95, 0.86), glow * glow * 0.5);
 
   // --- Pencil: contours and hatching of the subject, drawn as the paper arrives.
   vec4 sketch = texture(uSketch, uv);
-  vec4 lead = texture(uPencil, uv);
+  vec4 lead = mix(texture(uPencil, uv), texture(uPencilWide, sheet), max(past, edging * smoothstep(-0.16, -0.03, rimDistance)));
   float matteSharp = texture(uMatte, uv).r;
   float matteSoft = textureLod(uMatte, uv, 3.0).r;
-  float subject = smoothstep(0.2, 0.55, mix(matteSharp, matteSoft, 0.5));
+  // A figure cut by the frame carries on a little past it, with a ragged end.
+  float carry = 1.0 - smoothstep(0.02, 0.45, beyond + soft * 0.12 * past);
+  float subject = mix(smoothstep(0.2, 0.55, mix(matteSharp, matteSoft, 0.5)), smoothstep(0.3, 0.6, far.b), dissolve) * carry;
   float drawn = smoothstep(0.03, 0.4, paperAge);
+  // Past the edge the pencil is already on the sheet when the frame pulls back to show it.
+  drawn = mix(drawn, 1.0, past);
   float graphite = 0.68 + 0.32 * smoothstep(0.25, 0.75, tooth * 0.6 + pores * 0.4);
   float pencil = lead.r * subject * drawn * graphite;
 
   // --- Ink: arrives blurred and pale, then settles into the tones of the photograph.
   float feather = fbm(p * 24.0 + uSeed * 4.0) - 0.5;
   // Ink may follow closely behind the paper front, but never overtakes it.
-  float inkAge = min(uTime - easeOut(field.g + feather * 0.022, uInk), paperAge - 0.12);
+  float inkAge = min(uTime - inkArrival(field.g + feather * 0.022), paperAge - 0.12);
   if (uSketchOnly > 0.5) inkAge = -10.0;
-  float cover = smoothstep(0.0, 0.035, inkAge);
+  // Past the edge the front has no crisp line: the wash soaks in slowly.
+  float cover = smoothstep(0.0, mix(0.035, 0.45, smoothstep(0.0, 0.14, beyond)), inkAge);
   float settle = smoothstep(0.0, 1.1, inkAge);
-  float lod = 4.5 * (1.0 - settle) * (1.0 - settle);
-  float luma = dot(textureLod(uPhoto, uv, lod).rgb, vec3(0.299, 0.587, 0.114));
-  float lumaWash = textureLod(uSketch, uv, 2.5).g;
+  float lod = max(4.5 * (1.0 - settle) * (1.0 - settle), 3.0 * dissolve);
+  float luma = mix(dot(textureLod(uPhoto, uv, lod).rgb, vec3(0.299, 0.587, 0.114)), far.r, dissolve);
+  float lumaWash = mix(textureLod(uSketch, uv, 2.5).g, far.g, dissolve);
   float low = fbm(p * 3.1 + uSeed * 2.3);
   float bleed = textureLod(uMatte, uv + wobble * 0.03 / uAspect, 1.5 + 2.5 * (1.0 - settle)).r;
-  float inkMatte = smoothstep(0.28, 0.62, bleed + (low - 0.5) * 0.22);
+  float inkMatte = smoothstep(0.28, 0.62, mix(bleed, far.b, dissolve) + (low - 0.5) * 0.22) * carry;
 
   // Levels are stretched to the subject so backlit or flat photos still get a full tonal range.
   float inkTone = 1.0 - clamp((luma - uLevels.x) / (uLevels.y - uLevels.x), 0.0, 1.0);
   float bodyDensity = 0.05 + 1.6 * pow(inkTone, 1.4);
   // The first wash is thin; the darks flood in afterwards as their own, smaller blots.
-  vec4 second = texture(uField2, uv + wobble * 0.014 / uAspect);
+  vec4 second = texture(uField2, sheet + wobble * 0.014 / uAspect / uPad);
   float accentAge = min(uTime - easeOut(second.r + feather * 0.03, uAccent), inkAge - 0.1);
+  // Past the edge the darks come with the wash itself, so they are there as it is revealed.
+  accentAge = mix(accentAge, inkAge - 0.1, past);
   float accentCover = smoothstep(0.0, 0.04, accentAge);
   float accentSettle = smoothstep(0.0, 0.9, accentAge);
   float deepTone = smoothstep(0.3, 0.75, inkTone);
@@ -332,11 +415,29 @@ void main() {
   float run = fbm(p * 3.7 + uSeed * 5.0) + feather * 0.18;
   float bloom = smoothstep(0.58, 0.66, run);
   float bloomEdge = smoothstep(0.53, 0.6, run) * (1.0 - bloom);
-  density *= 1.0 + settle * (0.22 * bloomEdge - 0.3 * bloom);
+  density *= 1.0 + settle * (0.22 * bloomEdge - 0.3 * bloom) * (1.0 - 0.8 * dissolve);
   density *= 1.0 - 0.16 * settle * smoothstep(0.6, 0.66, fbm(p * 10.0 + uSeed * 7.0) + feather * 0.1);
   float rim = exp(-max(inkAge, 0.0) / 0.16);
   density += rim * (0.07 + 0.4 * density);
-  density += field.b * 0.3 * settle * (0.3 + inkMatte);
+  density += field.b * 0.3 * settle * (0.3 + inkMatte) * (1.0 - dissolve);
+  // Past the photo the ink thins out to nothing, with no edge: it runs further where it is
+  // dark, and breaks into wisps as it goes.
+  // How far it runs varies along the edge: in places it gives out before the old edge, in
+  // others it runs well past, so the photo's rectangle does not survive as a shape.
+  float along = fbm(p * 1.7 + uSeed * 11.0);
+  float further = fbm(p * 2.3 + uSeed * 13.0 + 40.0);
+  // Pale, watery ink runs far; dark ink is heavy with pigment and settles early, but its
+  // water carries a faint tint on with the rest.
+  float spread = 0.55 + 0.9 * further;
+  float heavy = clamp(density / 1.1, 0.0, 1.0);
+  float reach = mix(0.26, 0.045, heavy) * spread;
+  float begin = mix(-0.13, 0.04, smoothstep(0.3, 0.7, along)) - 0.05 * heavy;
+  float wisp = fbm(p * 5.0 + uSeed * 9.0);
+  float wander = rimDistance + (wisp - 0.5) * 0.14;
+  float thinning = smoothstep(begin, begin + reach, wander) * mix(edging, 1.0, smoothstep(-0.02, 0.02, rimDistance));
+  float tint = min(density, 0.17) * thinning * (1.0 - smoothstep(begin, begin + 0.3 * spread, wander)) * (0.45 + 0.7 * wisp);
+  density = density * (1.0 - thinning) * mix(1.0, 0.5 + wisp, thinning) + tint;
+  density += blots(p) * smoothstep(-0.02, 0.08, rimDistance) * (0.6 + 0.8 * wisp);
   density *= 1.0 + 0.16 * exp(-max(inkAge, 0.0) / 1.4);
   density *= cover;
   // Water runs ahead of the pigment and leaves a faint stain before the front arrives.
@@ -349,7 +450,7 @@ void main() {
   vec3 pigment = mix(sepia, clamp(mix(vec3(0.8, 0.72, 0.6), hue, 0.8) * 0.4, 0.02, 0.9), uTint);
   vec3 painted = paper * pow(pigment, vec3(density));
 
-  float inkLine = max(lead.g, sketch.r * (1.0 - subject)) * cover * mix(0.3, 1.0, inkMatte) * (0.4 + 0.6 * settle);
+  float inkLine = max(lead.g, sketch.r * (1.0 - subject) * (1.0 - dissolve)) * cover * mix(0.3, 1.0, inkMatte) * (0.4 + 0.6 * settle);
   painted *= mix(vec3(1.0), vec3(0.2, 0.14, 0.1), inkLine * 0.75);
   // Pencil darkens once the ink soaks it. The wash itself is untouched. In a light wash the
   // strokes turn a deep graphite; in a dark one they go fully black and heavier, which is
@@ -361,5 +462,16 @@ void main() {
 
   vec3 col = mix(film, painted, paperMask);
   col += (hash(uv * uSize + uTime) - 0.5) * 0.012;
+  // Planning guides: the photo's own outline and four hairlines that cut it into thirds.
+  // They belong to the photo, so they turn and move with it and show how it sits in the frame.
+  if (uGuides > 0.0) {
+    vec2 perPixel = vec2(length(vec2(dFdx(uv.x), dFdy(uv.x))), length(vec2(dFdx(uv.y), dFdy(uv.y))));
+    // Lines fall on every third, which includes the two edges; they stop at the outline.
+    vec2 px = abs(fract(uv * 3.0 + 0.5) - 0.5) / 3.0 / perPixel;
+    vec2 reach = step(-1.5 * perPixel, uv) * step(uv, 1.0 + 1.5 * perPixel);
+    float line = mix(1e3, min(px.x, px.y), reach.x * reach.y);
+    col = mix(col, vec3(0.0), uGuides * 0.25 * (1.0 - smoothstep(0.6, 2.2, line)));
+    col = mix(col, vec3(1.0), uGuides * 0.85 * (1.0 - smoothstep(0.2, 1.0, line)));
+  }
   outColor = vec4(col, 1.0);
 }`

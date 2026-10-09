@@ -27,6 +27,8 @@ pnpm preview
 - **New pour** keeps the photo but picks new starting points and paper.
 - **Colour** tints the ink with the photo's own hues instead of plain sepia.
 - **Hatching** sets how much pencil hatching there is; at zero only the contours remain.
+- **Rotate**, **Scale**, and dragging the picture plan the final frame: where the photo ends up once the camera has moved. Scale runs from 0.6×, where the photo sits small on a wide sheet of paper, to 2×. While you plan, the finished frame is shown with the photo's outline and thirds drawn over it, and it stays up for a moment after you let go. **Reset frame** puts the camera back.
+- **Motion** picks how the camera gets there: *Rhythmic* (three quick pushes, sideways first, then down and round), *Smooth* (one slow glide), or *Rapid* (one fast push). All three keep drifting slowly until the last moment.
 - **Focus** sets how much the viewer's attention changes the hatching. At zero the whole subject is hatched from tone alone; at full strength the places people look at get short strokes on one side of each contour and stay otherwise clean. While either slider is dragged, the bare drawing is shown so the change is easy to judge.
 
 ## How It Works
@@ -37,6 +39,12 @@ pnpm preview
 4. **Composite.** One fragment shader turns "seconds since the front arrived" into the look of each pixel: wet bleached paper that ages, pencil that breaks on the paper's tooth, and ink that arrives blurred and pale, then sharpens and deepens. A darker rim follows the wet front, pigment pools where the front crawled, water seeps slightly ahead, and late backruns leave pale blooms. Ink is mixed subtractively (`paper * pigment^density`).
 
 The fronts are eased rather than linear: paper opens with a couple of slow puffs and then bursts, the first wash surges in right behind it and creeps to a stop, and the darks keep arriving after that. Because the fronts are precomputed, the animation is a pure function of time and can be scrubbed in both directions.
+
+### Beyond the Photo
+
+Everything is solved on a sheet 1.67 times the size of the photo, so the camera can leave it. Past the photo's edge there is no picture to draw from, so `extendSheet` in `src/engine/fields.js` spreads its tones outwards with a blur that grows with distance, subject and background separately. Detail and pencil let go a little before the edge, sooner where contours crowd it; pale ink runs further than dark ink and thins to nothing with no outline; and a few separate blots land on the bare paper and run together where they touch.
+
+`src/engine/framing.js` holds the planned frame to one rule: the sheet, scaled, turned and moved with the photo, must cover the whole viewport. That is why turning the photo raises the smallest scale, and why it cannot be moved at all at 0.6×. The scale and position you asked for are remembered, so they come back when there is room again. The camera leaves once the paper has covered the photo; `MOTIONS` in `src/engine/renderer.js` describes each way of getting there as a short list of pushes.
 
 Timing lives in `TIMELINE` in `src/engine/renderer.js`; the look of the paper and ink is in the `COMPOSITE` shader.
 

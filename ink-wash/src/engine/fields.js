@@ -183,10 +183,11 @@ function blur(src, w, h, radius, passes = 2) {
   return a
 }
 
-// Rescales so the front has covered ~everything at 1.
-function normalize(field) {
+// Rescales so the front has covered ~everything at 1. With a margin around the frame, only
+// the frame itself counts, so the timing inside it does not change.
+function normalize(field, outside) {
   const sample = []
-  for (let i = 0; i < field.length; i += 7) sample.push(field[i])
+  for (let i = 0; i < field.length; i += 7) if (!outside || outside[i] === 0) sample.push(field[i])
   sample.sort((p, q) => p - q)
   const scale = 1 / (sample[Math.floor(sample.length * 0.995)] || 1)
   for (let i = 0; i < field.length; i++) field[i] *= scale
@@ -225,14 +226,71 @@ function pickSeeds(w, h, weight, count, minDist, rand) {
 }
 
 /**
+ * A soft continuation of the photo onto the wider sheet, so nothing past its edge is
+ * a stretched edge pixel. Each quantity is spread outwards with a blur that grows with
+ * distance (a normalised convolution over several scales). Subject and background are
+ * continued separately, so a dark figure does not smear into the pale ground beside it.
+ *
+ * @param {{ width: number, height: number, matte: Float32Array, luma: Float32Array, edge: Float32Array, outside: Float32Array }} input
+ *   padded maps; `outside` is 0 inside the photo
+ * @returns {Float32Array} RGBA: subject tone, background tone, matte, how busy the nearby edge is
+ */
+export function extendSheet({ width: w, height: h, matte, luma, edge, outside }) {
+  const n = w * h
+  const inFrame = new Float32Array(n)
+  const weightSubject = new Float32Array(n)
+  const weightGround = new Float32Array(n)
+  const toneSubject = new Float32Array(n)
+  const toneGround = new Float32Array(n)
+  const matteIn = new Float32Array(n)
+  const busyIn = blur(edge, w, h, 5, 2)
+  for (let i = 0; i < n; i++) {
+    if (outside[i] > 0) {
+      busyIn[i] = 0
+      continue
+    }
+    inFrame[i] = 1
+    weightSubject[i] = matte[i]
+    weightGround[i] = 1 - matte[i]
+    toneSubject[i] = luma[i] * matte[i]
+    toneGround[i] = luma[i] * (1 - matte[i])
+    matteIn[i] = matte[i]
+  }
+  const sums = Array.from({ length: 7 }, () => new Float32Array(n))
+  const sources = [toneSubject, weightSubject, toneGround, weightGround, matteIn, busyIn, inFrame]
+  // Fine scales carry far more weight, so each place takes the finest scale that reaches it.
+  for (const radius of [1, 2, 4, 8, 16, 32, 64, 128]) {
+    const weight = 1 / (radius * radius)
+    sources.forEach((source, k) => {
+      const spread = blur(source, w, h, radius, 2)
+      const sum = sums[k]
+      for (let i = 0; i < n; i++) sum[i] += spread[i] * weight
+    })
+  }
+  const sample = []
+  for (let i = 0; i < n; i += 5) if (outside[i] === 0) sample.push(busyIn[i])
+  sample.sort((p, q) => p - q)
+  const lively = sample[Math.floor(sample.length * 0.9)] || 1
+  const out = new Float32Array(n * 4)
+  for (let i = 0; i < n; i++) {
+    const ground = sums[2][i] / (sums[3][i] + 1e-9)
+    out[i * 4] = sums[1][i] > 1e-7 ? sums[0][i] / sums[1][i] : ground
+    out[i * 4 + 1] = sums[3][i] > 1e-7 ? ground : sums[0][i] / (sums[1][i] + 1e-9)
+    out[i * 4 + 2] = sums[4][i] / (sums[6][i] + 1e-9)
+    out[i * 4 + 3] = smooth(0.35, 1.0, sums[5][i] / (sums[6][i] + 1e-9) / lively)
+  }
+  return out
+}
+
+/**
  * @param {{ width: number, height: number, matte: Float32Array, luma: Float32Array, edge: Float32Array, seed: number }} input
  * @returns {{ width: number, height: number, data: Float32Array, second: Float32Array }}
  *   data RGBA: paper time, ink time, ink slowness, paper slowness; second RG: dark-pass time and slowness
  */
-export function buildFields({ width: w, height: h, matte, luma, edge, seed }) {
+export function buildFields({ width: w, height: h, matte, luma, edge, seed, outside = null, frameLong = 0 }) {
   const rand = mulberry32(seed)
   const n = w * h
-  const long = Math.max(w, h)
+  const long = frameLong || Math.max(w, h) // lengths stay tied to the frame, not the margin
 
   // Subject geometry.
   let total = 0, top = 0, bottom = h, left = w, right = 0
@@ -300,7 +358,7 @@ export function buildFields({ width: w, height: h, matte, luma, edge, seed }) {
     paperSeeds.push({ x: rand() * w, y: rand() * h, t: long * range(0.12, 0.55), pace: range(2.2, 3.6) })
   }
   const paperRun = dijkstra(w, h, paperCost, paperSeeds)
-  const paper = normalize(blur(paperRun.dist, w, h, 1, 1))
+  const paper = normalize(blur(paperRun.dist, w, h, 1, 1), outside)
 
   // Ink: a first wash starts in the darkest parts of the subject, pools along drawn
   // edges, and only then leaks through the outline into the background. Seeds differ
@@ -316,6 +374,11 @@ export function buildFields({ width: w, height: h, matte, luma, edge, seed }) {
     darkness[i] = inside[i] > 0.6 ? 0.05 + 0.95 * dark * dark : 0
     deep[i] = inside[i] > 0.6 ? dark * dark * dark : 0
     openness[i] = inside[i] < 0.2 ? 1 : 0
+    // With a margin, blots may start only in the frame or just past it.
+    if (outside && outside[i] > 0.1) {
+      openness[i] = 0
+      anywhere[i] = 0
+    }
   }
   const inkCost = new Float32Array(n)
   const accentCost = new Float32Array(n)
@@ -329,7 +392,10 @@ export function buildFields({ width: w, height: h, matte, luma, edge, seed }) {
       const g = smooth(0.3, 0.7, grain[i])
       const outline = hasSubject ? 4 * inside[i] * (1 - inside[i]) : 0
       const medium = 0.4 + (1 - g) * (2.2 * broad[i] + 0.6 * fineCells[i]) + g * (1.2 * mid[i] + 1.5 * fineCells[i])
-      inkCost[i] = medium * (1 + 5 * edge[i]) * (1.7 - 0.7 * inside[i]) + 9 * outline
+      // Beyond the frame the paper is dry: the ink slows down and stalls a little way out.
+      // It dries unevenly, so the front leaves the photo ragged instead of as a rectangle.
+      const dry = outside ? 1 + 2.5 * Math.pow(outside[i] / 0.33, 1.5) * (0.35 + 1.3 * broad[i]) : 1
+      inkCost[i] = (medium * (1 + 5 * edge[i]) * (1.7 - 0.7 * inside[i]) + 9 * outline) * dry
       // The second, darker pass prefers shadows and hardly leaves the subject.
       accentCost[i] = (0.4 + 1.7 * accentCells[i] + 0.8 * mid[i]) * (1 + 3.5 * luma[i]) * (1 + 3 * edge[i]) * (3 - 2 * inside[i]) + 6 * outline
     }
@@ -342,7 +408,7 @@ export function buildFields({ width: w, height: h, matte, luma, edge, seed }) {
   ]
   if (!inkSeeds.length) inkSeeds.push({ ...head, t: 0 })
   const inkRun = dijkstra(w, h, inkCost, inkSeeds)
-  const ink = normalize(blur(inkRun.dist, w, h, 1, 1))
+  const ink = normalize(blur(inkRun.dist, w, h, 1, 1), outside)
 
   const accentSeeds = [
     ...pickSeeds(w, h, deep, 9, long * 0.07, rand).map(p => ({ ...p, t: long * range(0, 0.5), pace: range(0.6, 2.4) })),
@@ -350,7 +416,7 @@ export function buildFields({ width: w, height: h, matte, luma, edge, seed }) {
   ]
   if (!accentSeeds.length) accentSeeds.push({ ...head, t: 0 })
   const accentRun = dijkstra(w, h, accentCost, accentSeeds)
-  const accent = normalize(blur(accentRun.dist, w, h, 1, 1))
+  const accent = normalize(blur(accentRun.dist, w, h, 1, 1), outside)
 
   const inkSlow = slowness(ink, w, h, inkRun.pace)
   const paperSlow = slowness(paper, w, h, paperRun.pace)

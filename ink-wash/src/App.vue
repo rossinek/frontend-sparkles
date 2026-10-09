@@ -1,6 +1,7 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { createRenderer, TIMELINE, WORK_SIZE } from './engine/renderer.js'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { createRenderer, durationFor, WIDE, WORK_SIZE } from './engine/renderer.js'
+import { effective, MAX_ROTATION, MAX_SCALE } from './engine/framing.js'
 import { attention } from './engine/attention.js'
 
 const canvas = ref(null)
@@ -13,6 +14,14 @@ const colour = ref(false)
 const hatching = ref(0.5)
 const focus = ref(1)
 const dragging = ref(false)
+// The final frame as the user asked for it. What is shown is `framing`, which holds these
+// within what the sheet can cover; the asked-for values are kept, so they return when there
+// is room again.
+const rotation = ref(0)
+const scaleWanted = ref(1)
+const panWanted = ref([0, 0])
+const aspect = ref(1600 / 1006)
+const motion = ref('rhythmic')
 const isSample = ref(true)
 const unsupported = ref(false)
 
@@ -24,8 +33,25 @@ let last = 0
 let job = 0
 let seed = 7
 let looking = null
+let grab = null
+let lingering = 0
 
-const progress = computed(() => `${(time.value / TIMELINE.duration) * 100}%`)
+const framing = computed(() => effective({ rotation: rotation.value, scale: scaleWanted.value, pan: panWanted.value }, aspect.value, WIDE))
+const duration = computed(() => durationFor(framing.value))
+const progress = computed(() => `${(time.value / duration.value) * 100}%`)
+// The scale slider works in octaves, so each step feels the same size.
+const scaleRange = computed(() => {
+  const min = Math.log2(framing.value.minScale)
+  const max = Math.log2(MAX_SCALE)
+  const value = Math.log2(framing.value.scale)
+  return { min, max, value, progress: `${((value - min) / (max - min)) * 100}%` }
+})
+const framed = computed(() => !framing.value.still)
+
+watch(framing, value => {
+  renderer?.setFraming(value)
+  if (time.value > duration.value) time.value = duration.value
+}, { immediate: true })
 
 function scaled(bitmap, limit) {
   const ratio = Math.min(1, limit / Math.max(bitmap.width, bitmap.height))
@@ -56,7 +82,7 @@ function start(maps) {
   renderer.prepare(maps, seed)
   ready.value = true
   status.value = ''
-  time.value = reducedMotion ? TIMELINE.duration : 0
+  time.value = reducedMotion ? duration.value : 0
   playing.value = !reducedMotion
 }
 
@@ -76,6 +102,7 @@ async function load(source, sample = false) {
   }
   if (id !== job) return
   const work = scaled(bitmap, WORK_SIZE)
+  aspect.value = work.width / work.height
   canvas.value.width = work.width
   canvas.value.height = work.height
   renderer.setImage(work)
@@ -112,15 +139,15 @@ function tick(now) {
   const delta = Math.min((now - last) / 1000, 0.1)
   last = now
   if (playing.value) {
-    time.value = Math.min(time.value + delta, TIMELINE.duration)
-    if (time.value >= TIMELINE.duration) playing.value = false
+    time.value = Math.min(time.value + delta, duration.value)
+    if (time.value >= duration.value) playing.value = false
   }
   renderer.render(time.value)
 }
 
 function toggle() {
   if (!ready.value) return
-  if (!playing.value && time.value >= TIMELINE.duration) time.value = 0
+  if (!playing.value && time.value >= duration.value) time.value = 0
   playing.value = !playing.value
 }
 
@@ -164,6 +191,66 @@ function endSketchPreview() {
   renderer.setSketchOnly(false)
 }
 
+// Planning the final frame shows it as it will end up; letting go returns to the animation.
+function plan() {
+  clearTimeout(lingering)
+  renderer.setPlanning(true)
+}
+
+// The planned frame stays up for a moment after letting go, so it can be judged at rest.
+function endPlanning() {
+  clearTimeout(lingering)
+  lingering = setTimeout(() => renderer.setPlanning(false), 1400)
+}
+
+function setRotation(event) {
+  rotation.value = Number(event.target.value)
+  plan()
+}
+
+function setScale(event) {
+  scaleWanted.value = 2 ** Number(event.target.value)
+  plan()
+}
+
+function setMotion(event) {
+  motion.value = event.target.value
+  renderer.setMotion(motion.value)
+}
+
+function resetFrame() {
+  rotation.value = 0
+  scaleWanted.value = 1
+  panWanted.value = [0, 0]
+}
+
+// A press on the picture is a click (play or pause) until it moves; then it drags the photo
+// to where it should sit in the final frame.
+function press(event) {
+  if (!ready.value) return
+  grab = { id: event.pointerId, x: event.clientX, y: event.clientY, pan: framing.value.pan, moved: false }
+  event.currentTarget.setPointerCapture(event.pointerId)
+}
+
+function drag(event) {
+  if (!grab || event.pointerId !== grab.id) return
+  const dx = event.clientX - grab.x
+  const dy = event.clientY - grab.y
+  if (!grab.moved && Math.hypot(dx, dy) < 4) return
+  grab.moved = true
+  const height = event.currentTarget.getBoundingClientRect().height
+  panWanted.value = [grab.pan[0] + dx / height, grab.pan[1] - dy / height]
+  plan()
+}
+
+function release(event) {
+  if (!grab || event.pointerId !== grab.id) return
+  const { moved } = grab
+  grab = null
+  if (moved) endPlanning()
+  else if (event.type === 'pointerup') toggle()
+}
+
 function pick(event) {
   const [file] = event.target.files
   if (file) load(file)
@@ -202,6 +289,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   cancelAnimationFrame(frame)
+  clearTimeout(lingering)
   window.removeEventListener('keydown', onKey)
   worker?.terminate()
 })
@@ -226,7 +314,15 @@ onBeforeUnmount(() => {
 
     <section class="stage">
       <div class="frame">
-        <canvas ref="canvas" width="1600" height="1006" @click="toggle"></canvas>
+        <canvas
+          ref="canvas"
+          width="1600"
+          height="1006"
+          @pointerdown="press"
+          @pointermove="drag"
+          @pointerup="release"
+          @pointercancel="release"
+        ></canvas>
         <p v-if="status" class="status" role="status">{{ status }}</p>
       </div>
       <p class="drop-hint">Drop the photo to paint it</p>
@@ -241,7 +337,7 @@ onBeforeUnmount(() => {
         class="scrubber"
         type="range"
         min="0"
-        :max="TIMELINE.duration"
+        :max="duration"
         step="0.01"
         :value="time"
         :disabled="!ready"
@@ -289,7 +385,54 @@ onBeforeUnmount(() => {
       </label>
     </div>
 
+    <div class="sketch-controls">
+      <label>
+        <span>Rotate</span>
+        <input
+          class="scrubber centred"
+          type="range"
+          :min="-MAX_ROTATION"
+          :max="MAX_ROTATION"
+          step="0.5"
+          :value="rotation"
+          :disabled="!ready"
+          :style="{ '--progress': `${((rotation + MAX_ROTATION) / (2 * MAX_ROTATION)) * 100}%` }"
+          @input="setRotation"
+          @change="endPlanning"
+          @blur="endPlanning"
+        >
+        <output>{{ rotation.toFixed(1) }}°</output>
+      </label>
+      <label>
+        <span>Scale</span>
+        <input
+          class="scrubber"
+          type="range"
+          :min="scaleRange.min"
+          :max="scaleRange.max"
+          step="0.005"
+          :value="scaleRange.value"
+          :disabled="!ready"
+          :style="{ '--progress': scaleRange.progress }"
+          @input="setScale"
+          @change="endPlanning"
+          @blur="endPlanning"
+        >
+        <output>{{ framing.scale.toFixed(2) }}×</output>
+      </label>
+      <label class="compact">
+        <span>Motion</span>
+        <select :value="motion" :disabled="!ready" @change="setMotion">
+          <option value="rhythmic">Rhythmic</option>
+          <option value="smooth">Smooth</option>
+          <option value="rapid">Rapid</option>
+        </select>
+      </label>
+      <button type="button" :disabled="!ready || !framed" @click="resetFrame">Reset frame</button>
+    </div>
+
     <p class="note">
+      <template v-if="ready">Drag the picture to place it in the final frame. </template>
       Everything runs in your browser; the photo is never uploaded.
       <template v-if="isSample">Sample photo by Toni Hukkanen (CC0).</template>
     </p>

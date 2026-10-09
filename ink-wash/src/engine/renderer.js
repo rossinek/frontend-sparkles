@@ -1,9 +1,13 @@
 import { VERTEX, LUMA, BLUR, SKETCH, PROBE, HATCH, COMPOSITE } from './shaders.js'
-import { buildFields } from './fields.js'
+import { buildFields, extendSheet } from './fields.js'
 import { buildGuides, GUIDE_SIZE } from './guides.js'
+import { effective } from './framing.js'
 
 export const WORK_SIZE = 1600
 const FIELD_SIZE = 512
+// Everything is solved on a sheet this many times larger than the photo, so the planned
+// frame can pull back until the photo fills 60% of the height.
+export const WIDE = 1 / 0.6
 
 // Seconds. Each front is [start, duration, easing exponent]: paper opens slowly and then
 // bursts, the first wash surges in behind it, and the darks arrive last. The remaining time
@@ -14,6 +18,59 @@ export const TIMELINE = {
   accent: [1.55, 2.6, 2.4],
   duration: 4.7,
 }
+
+// The camera leaves for the planned frame once the paper has covered the photo, and the
+// scene past the photo's edge goes on finishing afterwards. Seconds.
+export const PULL = { start: TIMELINE.paper[0] + TIMELINE.paper[1], total: 6.6 }
+const TAIL = PULL.total - PULL.start // seconds from the start of the move to the last moment
+
+const together = share => ({ x: share, y: share, turn: share, zoom: share })
+const easings = {
+  // Starts at full speed and eases out; the higher the power, the harder the kick.
+  out: power => x => 1 - (1 - x) ** power,
+  // Eases in and out.
+  inOut: () => x => x * x * x * (x * (6 * x - 15) + 10),
+}
+
+// Ways for the camera to reach the planned frame. Each is a list of pushes, and each push
+// does its own share of the sideways travel, the vertical travel, the turn, and the zoom;
+// every column adds up to 1. All of them hold a little back and spend it slowly right up to
+// the last moment, so the scene never quite stands still.
+// [delay after start, length, shares, easing]
+export const MOTIONS = {
+  // Three quick pushes on an even rhythm: the first mostly sideways with a hint of turn, the
+  // later ones carrying the vertical travel and most of the rotation.
+  rhythmic: [
+    [0, 0.5, { x: 0.72, y: 0.08, turn: 0.1, zoom: 0.42 }, easings.out(4)],
+    [0.55, 0.5, { x: 0.2, y: 0.57, turn: 0.52, zoom: 0.33 }, easings.out(4)],
+    [1.1, 1.4, { x: 0.052, y: 0.2275, turn: 0.247, zoom: 0.1625 }, easings.out(4)],
+    [1.1, TAIL - 1.1, { x: 0.028, y: 0.1225, turn: 0.133, zoom: 0.0875 }, easings.out(2)],
+  ],
+  // One slow glide that eases in and out, then a long, slow run-out.
+  smooth: [
+    [0, 3.4, together(0.85), easings.inOut()],
+    [1.4, TAIL - 1.4, together(0.15), easings.out(2)],
+  ],
+  // One fast push that brakes hard, then the same slow run-out.
+  rapid: [
+    [0, 0.7, together(0.82), easings.out(4)],
+    [0.3, TAIL - 0.3, together(0.18), easings.out(2.5)],
+  ],
+}
+
+/** How long the animation runs: longer when the camera moves, so the sheet can finish. */
+export const durationFor = framing => (framing.still ? TIMELINE.duration : PULL.total)
+
+// How far each part of the camera move has come at time t, 0…1.
+function pullAt(t, motion) {
+  const done = { x: 0, y: 0, turn: 0, zoom: 0 }
+  for (const [delay, length, shares, ease] of MOTIONS[motion]) {
+    const eased = ease(Math.min(Math.max((t - PULL.start - delay) / length, 0), 1))
+    for (const part in done) done[part] += shares[part] * eased
+  }
+  return done
+}
+
 
 function compile(gl, type, source) {
   const shader = gl.createShader(type)
@@ -55,7 +112,7 @@ export function createRenderer(canvas) {
   gl.bindVertexArray(vao)
   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1)
 
-  const state = { width: 0, height: 0, source: null, ready: false, tint: 0, seed: 1, levels: [0, 1], hatching: 0.5, focus: 1, lines: 'sketch', sketchOnly: false }
+  const state = { width: 0, height: 0, source: null, ready: false, tint: 0, seed: 1, levels: [0, 1], hatching: 0.5, focus: 1, lines: 'sketch', sketchOnly: false, planning: false, guides: 0, motion: 'rhythmic', framing: { rotation: 0, scale: 1, pan: [0, 0], still: true } }
   const textures = {}
   const targets = {}
 
@@ -153,6 +210,7 @@ export function createRenderer(canvas) {
     for (const name of ['luma', 'scratch', 'fine', 'mid', 'coarse']) target(name, width, height, { float: true })
     target('sketch', width, height, { mipmaps: true })
     target('pencil', width, height)
+    target('pencilWide', width, height)
     draw(programs.luma, 'luma', { uSource: 'photo' })
     blur('luma', 'fine', 0.9 * scale)
     blur('luma', 'mid', 1.7 * scale)
@@ -173,20 +231,26 @@ export function createRenderer(canvas) {
     floatTexture('guideTone', guides.width, guides.height, guides.tone)
     floatTexture('guideField', guides.width, guides.height, guides.field)
     floatTexture('guideSide', guides.width, guides.height, guides.side)
-    drawPencil()
     reseed(seed)
+    drawPencil()
   }
 
   // One full-screen pass, so it is rerun on every slider move.
   function drawPencil() {
     const { width, height } = state
-    draw(programs.hatch, 'pencil', { uLine: state.lines, uMatte: 'matte', uTone: 'guideTone', uField: 'guideField', uSide: 'guideSide' }, {
-      uSize: [width, height],
-      uUnit: Math.max(width, height) / 1400,
-      uHatching: state.hatching,
-      uFocus: state.focus,
-      uSeed: 3.5,
-    })
+    // Drawn twice: the frame itself, and the wider sheet where strokes trail off past its edge.
+    for (const [into, pad] of [['pencil', 1], ['pencilWide', WIDE]]) {
+      draw(programs.hatch, into, { uLine: state.lines, uMatte: 'matte', uTone: 'guideTone', uField: 'guideField', uSide: 'guideSide', uSheet: 'sheet' }, {
+        uWide: WIDE,
+        uSize: [width, height],
+        uUnit: Math.max(width, height) / 1400,
+        uHatching: state.hatching,
+        uFocus: state.focus,
+        uSeed: 3.5,
+        uPad: pad,
+        uFade: pad > 1 ? 1 : 0,
+      })
+    }
   }
 
   function reseed(seed) {
@@ -214,17 +278,63 @@ export function createRenderer(canvas) {
       const high = tones[Math.floor(tones.length * 0.97)]
       state.levels = [low, Math.max(high, low + 0.25)]
     } else state.levels = [0, 1]
-    const fields = buildFields({ width: w, height: h, matte, luma, edge, seed })
-    floatTexture('field', w, h, fields.data)
-    floatTexture('field2', w, h, fields.second)
+    // Pad the maps onto the wider sheet. Outside the frame the nearest edge value is used;
+    // the subject fades out over a short distance so a figure cut by the frame trails off.
+    const pw = Math.round(w * WIDE)
+    const ph = Math.round(h * WIDE)
+    const ox = (pw - w) >> 1
+    const oy = (ph - h) >> 1
+    const wide = { matte: new Float32Array(pw * ph), luma: new Float32Array(pw * ph), edge: new Float32Array(pw * ph), outside: new Float32Array(pw * ph) }
+    for (let y = 0; y < ph; y++) {
+      for (let x = 0; x < pw; x++) {
+        const sx = Math.min(w - 1, Math.max(0, x - ox))
+        const sy = Math.min(h - 1, Math.max(0, y - oy))
+        const distance = Math.hypot(x - ox - sx, y - oy - sy) / h
+        const fade = 1 - Math.min(1, Math.max(0, (distance - 0.03) / 0.17))
+        const from = sy * w + sx
+        const to = y * pw + x
+        wide.matte[to] = matte[from] * fade
+        wide.luma[to] = luma[from]
+        wide.edge[to] = distance > 0 ? 0 : edge[from]
+        wide.outside[to] = distance
+      }
+    }
+    const padded = { matte: new Float32Array(pw * ph), luma: wide.luma, edge: wide.edge, outside: wide.outside }
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) padded.matte[(y + oy) * pw + x + ox] = matte[y * w + x]
+    floatTexture('sheet', pw, ph, extendSheet({ width: pw, height: ph, ...padded }))
+    const fields = buildFields({ width: pw, height: ph, ...wide, seed, frameLong: Math.max(w, h) })
+    floatTexture('field', pw, ph, fields.data)
+    floatTexture('field2', pw, ph, fields.second)
     state.seed = seed
     state.ready = true
   }
 
   function render(time) {
+    const { framing } = state
+    const pulledBack = !framing.still
     if (!state.width) return
-    const t = Math.min(Math.max(time, 0), TIMELINE.duration)
-    draw(programs.composite, null, { uPhoto: 'photo', uSketch: 'sketch', uPencil: 'pencil', uMatte: 'matte', uField: 'field', uField2: 'field2' }, {
+    // While the frame is being planned, show where it ends up: the last moment, camera arrived.
+    state.guides += ((state.planning ? 1 : 0) - state.guides) * 0.25 // eased in and out, frame by frame
+    const t = state.planning ? durationFor(framing) : Math.min(Math.max(time, 0), durationFor(framing))
+    // The camera goes from the photo filling the viewport to the planned frame. Left where
+    // it is, it keeps the slow push-in the animation always had.
+    let camera = { rotation: 0, scale: 1 + 0.035 * (t / TIMELINE.duration), pan: [0, 0] }
+    let pull = 0
+    if (pulledBack) {
+      const done = pullAt(t, state.motion)
+      pull = done.zoom
+      // The parts travel out of step, so a point along the way is not automatically one the
+      // sheet can cover; it is held to what can be shown, as the planned frame itself is.
+      camera = effective({
+        rotation: framing.rotation * done.turn,
+        scale: Math.exp(Math.log(framing.scale) * done.zoom),
+        pan: [framing.pan[0] * done.x, framing.pan[1] * done.y],
+      }, state.width / state.height, WIDE)
+    }
+    const angle = (camera.rotation * Math.PI) / 180
+    const cos = Math.cos(angle) / camera.scale
+    const sin = Math.sin(angle) / camera.scale
+    draw(programs.composite, null, { uPhoto: 'photo', uSketch: 'sketch', uPencil: 'pencil', uPencilWide: 'pencilWide', uMatte: 'matte', uField: 'field', uField2: 'field2', uSheet: 'sheet' }, {
       uAspect: [state.width / state.height, 1],
       uSize: [state.width, state.height],
       uPaper: TIMELINE.paper,
@@ -235,7 +345,13 @@ export function createRenderer(canvas) {
       uLevels: state.levels,
       uSeed: (state.seed % 97) + 0.5,
       uStage: state.ready ? 1 : 0,
-      uZoom: 1 + 0.035 * (t / TIMELINE.duration),
+      uPan: camera.pan,
+      uGuides: state.guides < 0.004 ? 0 : state.guides,
+      uCamX: [cos, sin],
+      uCamY: [-sin, cos],
+      uPad: WIDE,
+      uPull: pull,
+      uPullStart: pulledBack ? PULL.start : 1e6, // never, when the frame stays put
       uTime: t,
     })
   }
@@ -255,6 +371,11 @@ export function createRenderer(canvas) {
       if (state.ready) drawPencil()
     },
     setSketchOnly: value => { state.sketchOnly = value },
+    /** @param {{ rotation: number, scale: number, pan: [number, number], still: boolean }} framing as returned by effective() */
+    setFraming: framing => { state.framing = framing },
+    setPlanning: value => { state.planning = value },
+    /** @param {keyof typeof MOTIONS} value */
+    setMotion: value => { state.motion = value },
     get ready() { return state.ready },
   }
 }
