@@ -422,7 +422,7 @@ onBeforeUnmount(() => {
             <button type="button" :disabled="!ready" :aria-pressed="colour" @click="toggleColour">Colour</button>
           </div>
           <label v-if="hasDepth" class="field">
-            <span class="field-head"><span>Reach</span><output>{{ Math.round(reach * 100) }}%</output></span>
+            <span class="field-head"><span class="hint" tabindex="0" aria-describedby="tip-reach">Reach<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" /><path d="M8 7.2v4M8 4.7v.1" /></svg><span id="tip-reach" class="tip" role="tooltip">Grows the subject to things at a similar depth that the cut-out missed.</span></span><output>{{ Math.round(reach * 100) }}%</output></span>
             <input
               class="scrubber"
               type="range"
@@ -436,10 +436,9 @@ onBeforeUnmount(() => {
               @change="applyReach"
               @blur="endReachPreview"
             >
-            <small>Grows the subject to things at a similar depth that the cut-out missed.</small>
           </label>
           <label class="field">
-            <span class="field-head"><span>Background details</span><output>{{ Math.round(background * 100) }}%</output></span>
+            <span class="field-head"><span class="hint" tabindex="0" aria-describedby="tip-background-details">Background details<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" /><path d="M8 7.2v4M8 4.7v.1" /></svg><span id="tip-background-details" class="tip" role="tooltip">How much of the background shows in the wash behind the subject.</span></span><output>{{ Math.round(background * 100) }}%</output></span>
             <input
               class="scrubber"
               type="range"
@@ -453,13 +452,12 @@ onBeforeUnmount(() => {
               @change="endFinishedPreview"
               @blur="endFinishedPreview"
             >
-            <small>How much of the background shows in the wash behind the subject.</small>
           </label>
         </PanelSection>
 
         <PanelSection title="Sketch">
           <label class="field">
-            <span class="field-head"><span>Hatching</span><output>{{ Math.round(hatching * 100) }}%</output></span>
+            <span class="field-head"><span class="hint" tabindex="0" aria-describedby="tip-hatching">Hatching<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" /><path d="M8 7.2v4M8 4.7v.1" /></svg><span id="tip-hatching" class="tip" role="tooltip">How much pencil shading is drawn; at zero only the outlines remain.</span></span><output>{{ Math.round(hatching * 100) }}%</output></span>
             <input
               class="scrubber"
               type="range"
@@ -473,10 +471,9 @@ onBeforeUnmount(() => {
               @change="endSketchPreview"
               @blur="endSketchPreview"
             >
-            <small>How much pencil shading is drawn; at zero only the outlines remain.</small>
           </label>
           <label class="field">
-            <span class="field-head"><span>Focus</span><output>{{ Math.round(focus * 100) }}%</output></span>
+            <span class="field-head"><span class="hint" tabindex="0" aria-describedby="tip-focus">Focus<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" /><path d="M8 7.2v4M8 4.7v.1" /></svg><span id="tip-focus" class="tip" role="tooltip">How strongly the shading thins out where the eye is drawn.</span></span><output>{{ Math.round(focus * 100) }}%</output></span>
             <input
               class="scrubber"
               type="range"
@@ -490,7 +487,6 @@ onBeforeUnmount(() => {
               @change="endSketchPreview"
               @blur="endSketchPreview"
             >
-            <small>How strongly the shading thins out where the eye is drawn.</small>
           </label>
         </PanelSection>
 

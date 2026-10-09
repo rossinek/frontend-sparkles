@@ -182,7 +182,9 @@ canvas {
 
 .panel-actions button { flex: 1; }
 
+/* A faint rule and some air above each section, and a heavier title. */
 .panel-section { border-top: 1px solid rgb(80 87 79 / 0.55); }
+.panel-section + .panel-section { margin-top: 10px; }
 
 .panel-section h2 { margin: 0; font: inherit; }
 
@@ -201,8 +203,10 @@ canvas {
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  padding: 14px 2px;
+  padding: 18px 2px 14px;
+  color: #fff;
   font-size: 12px;
+  font-weight: 600;
   letter-spacing: 0.2em;
   text-transform: uppercase;
   background: none;
@@ -242,12 +246,14 @@ canvas {
   overflow: hidden;
 }
 
+.settled .panel-content { overflow: visible; }
+
 /* Padding lives on the ends of the content, so a folded section really is zero tall. */
 .panel-content > :first-child { margin-top: 2px; }
-.panel-content > :last-child { margin-bottom: 20px; }
+.panel-content > :last-child { margin-bottom: 24px; }
 
 .section-note,
-.field small {
+.tip {
   margin: 0;
   color: var(--muted);
   font-size: 11px;
@@ -260,6 +266,7 @@ canvas {
   display: flex;
   flex-direction: column;
   gap: 5px;
+  color: #c9ccc2; /* a step below the section titles */
   font-size: 13px;
 }
 
@@ -267,6 +274,55 @@ canvas {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
+}
+
+/* A slider's description lives in a tooltip on its name; the (i) says there is one. */
+.hint {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 4px;
+  cursor: help;
+}
+
+.hint:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+.hint svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1.3;
+  stroke-linecap: round;
+  transition: stroke 0.15s;
+}
+
+.hint:hover svg, .hint:focus-visible svg { stroke: var(--accent); }
+
+.tip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  z-index: 5;
+  width: 240px;
+  padding: 9px 11px;
+  color: var(--text);
+  background: #2b2f2d;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 10px 28px rgb(0 0 0 / 0.5);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(3px);
+  transition: opacity 0.15s, transform 0.15s, visibility 0.15s;
+  pointer-events: none;
+}
+
+.hint:hover .tip, .hint:focus-visible .tip {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
 }
 
 .field output {
@@ -545,7 +601,7 @@ canvas { touch-action: none; }
 .fine { margin: 26px 0 0; }
 
 @media (prefers-reduced-motion: reduce) {
-  .panel-body, .panel-toggle svg, .sample img { transition: none; }
+  .panel-body, .panel-toggle svg, .sample img, .tip { transition: none; }
 }
 
 @media (max-width: 900px) {

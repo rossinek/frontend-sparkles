@@ -7,14 +7,25 @@ const props = defineProps({
 })
 
 const expanded = ref(props.open)
+// The content is clipped while it folds or unfolds. Once it is open and at rest the clip
+// comes off, so tooltips inside can hang over the section's edge.
+const settled = ref(props.open)
 const id = useId()
+let timer = 0
+
+function toggle() {
+  clearTimeout(timer)
+  settled.value = false
+  expanded.value = !expanded.value
+  if (expanded.value) timer = setTimeout(() => { settled.value = true }, 320)
+}
 </script>
 
 <template>
-  <section class="panel-section" :class="{ expanded, 'has-actions': $slots.actions }">
+  <section class="panel-section" :class="{ expanded, settled, 'has-actions': $slots.actions }">
     <div class="panel-head">
       <h2>
-        <button type="button" class="panel-toggle" :aria-expanded="expanded" :aria-controls="id" @click="expanded = !expanded">
+        <button type="button" class="panel-toggle" :aria-expanded="expanded" :aria-controls="id" @click="toggle">
           <span>{{ title }}</span>
           <svg viewBox="0 0 12 8" aria-hidden="true"><path d="M1 1.5l5 5 5-5" /></svg>
         </button>
