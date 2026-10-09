@@ -32,6 +32,7 @@ const scaleWanted = ref(1)
 const panWanted = ref([0, 0])
 const aspect = ref(1600 / 1006)
 const motion = ref('rhythmic')
+const outro = ref(false)
 const credit = ref(null) // the sample being shown, if it is one
 const unsupported = ref(false)
 
@@ -49,7 +50,7 @@ let grab = null
 let lingering = 0
 
 const framing = computed(() => effective({ rotation: rotation.value, scale: scaleWanted.value, pan: panWanted.value }, aspect.value, WIDE))
-const duration = computed(() => durationFor(framing.value))
+const duration = computed(() => durationFor(framing.value, outro.value))
 const progress = computed(() => `${(time.value / duration.value) * 100}%`)
 // The scale slider works in octaves, so each step feels the same size.
 const scaleRange = computed(() => {
@@ -59,6 +60,11 @@ const scaleRange = computed(() => {
   return { min, max, value, progress: `${((value - min) / (max - min)) * 100}%` }
 })
 const framed = computed(() => !framing.value.still)
+
+// Turning the outro off, or resetting the frame, can leave the clock past the new end.
+watch(duration, value => {
+  if (time.value > value) time.value = value
+})
 
 watch(framing, value => {
   renderer?.setFraming(value)
@@ -265,6 +271,11 @@ function setScale(event) {
 function setMotion(event) {
   motion.value = event.target.value
   renderer.setMotion(motion.value)
+}
+
+function setOutro(event) {
+  outro.value = event.target.checked
+  renderer.setOutro(outro.value)
 }
 
 function resetFrame() {
@@ -490,7 +501,7 @@ onBeforeUnmount(() => {
           </label>
         </PanelSection>
 
-        <PanelSection title="Rotate &amp; Scale">
+        <PanelSection title="Motion">
           <template #actions>
             <button v-if="ready && framed" class="icon-quiet" type="button" aria-label="Reset frame" title="Reset frame" @click="resetFrame">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 1.45-4.59M5 3.5v4h4" /></svg>
@@ -530,12 +541,16 @@ onBeforeUnmount(() => {
             >
           </label>
           <label class="field inline">
-            <span>Motion</span>
+            <span>Style</span>
             <select :value="motion" :disabled="!ready" @change="setMotion">
               <option value="rhythmic">Rhythmic</option>
               <option value="smooth">Smooth</option>
               <option value="rapid">Rapid</option>
             </select>
+          </label>
+          <label class="field inline">
+            <span class="hint" tabindex="0" aria-describedby="tip-outro">Outro<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" /><path d="M8 7.2v4M8 4.7v.1" /></svg><span id="tip-outro" class="tip" role="tooltip">After the painting, the camera returns to the photo's own frame and the photo spreads back over it from the middle.</span></span>
+            <input class="switch" type="checkbox" :checked="outro" :disabled="!ready" @change="setOutro">
           </label>
         </PanelSection>
       </aside>

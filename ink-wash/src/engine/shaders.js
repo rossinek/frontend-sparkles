@@ -277,6 +277,7 @@ uniform float uTint, uSeed, uStage, uTime, uSketchOnly, uPad;
 // that takes a viewport point (in viewport heights) back onto the photo.
 uniform vec2 uPan, uCamX, uCamY;
 uniform float uGuides; // 0…1: thirds drawn over the photo while the final frame is planned
+uniform float uOutro;  // outro: seconds since it began; below 0 it is off
 uniform sampler2D uGroundSketch; // the simplified background: R its lines, G its luminance
 uniform float uBackground;       // 1 keeps the background's detail; lower simplifies it before painting
 uniform float uGroundOn;         // 0 at full detail, where the untouched background is used
@@ -545,6 +546,43 @@ void main() {
 
   vec3 col = mix(film, painted, paperMask);
   col += (hash(uv * uSize + uTime) - 0.5) * 0.012;
+  // Outro: the photo comes back the way the paper came in, as spreading blots. They are a
+  // mask: where a front has passed, the photo shows through. One spreads from the middle
+  // straight away, while the camera is still returning; when it lands, more burst in around
+  // the edges and close the picture quickly.
+  if (uOutro > -0.5 && past < 0.5) {
+    float ragged = 0.3 * clamp(field.r, 0.0, 1.0) + fine * 0.04;
+    float fromCentre = length((uv - 0.5) * uAspect) / (0.5 * length(uAspect));
+    // Seconds until the middle blot gets here. It has a head start, so a first pool is
+    // already open in the middle at the very moment the camera starts back.
+    // Distance from the middle counts for only half of it; the rest is the paper's own
+    // billowing pattern and broad lobes of noise, so the pool is lopsided, not a disc.
+    float lobes = fbm(p * 2.6 + uSeed * 3.0) - 0.5;
+    float reached = 0.95 * (0.5 * fromCentre + 0.35 * clamp(field.r, 0.0, 1.0) + 0.45 * lobes + fine * 0.04) - 0.2;
+    // Six blots along the edges, away from the corners: one per side and a second on the top
+    // and bottom. Each is stretched along its edge, so it reads as a long pool creeping
+    // inwards rather than a dot, and its outline wanders.
+    for (int i = 0; i < 6; i++) {
+      float k = float(i);
+      int side = i < 4 ? i : (i - 4) * 2;
+      float f = 0.2 + 0.6 * hash(vec2(k, uSeed + 3.0));
+      vec2 c = side == 0 ? vec2(f, 0.0) : side == 1 ? vec2(1.0, f) : side == 2 ? vec2(1.0 - f, 1.0) : vec2(0.0, 1.0 - f);
+      vec2 v = (uv - c) * uAspect;
+      vec2 stretched = (side == 0 || side == 2) ? vec2(v.x * 0.38, v.y) : vec2(v.x, v.y * 0.38);
+      float wander = (fbm(p * 4.0 + k * 7.3) - 0.5) * 0.22;
+      float burst = 0.3 + 0.14 * hash(vec2(k, uSeed + 9.0)); // as the camera lands
+      reached = min(reached, burst + 1.1 * max(length(stretched) + wander + ragged * 0.6, 0.0));
+    }
+    float since = uOutro - reached;
+    float shown = smoothstep(0.0, 0.03, since);
+    float wet = smoothstep(-0.1, 0.0, since) * (1.0 - shown);
+    col = mix(col, vec3(0.99, 0.95, 0.86), wet * wet * 0.28); // the front runs ahead as clear water
+    // Just uncovered, the photo is muted and tinted sepia, close to the painting it replaces;
+    // each spot takes its colour back over the next half second.
+    float grey = dot(photo, vec3(0.299, 0.587, 0.114));
+    vec3 muted = mix(grey * vec3(1.06, 0.9, 0.7), photo, 0.25); // sepia, like the ink
+    col = mix(col, mix(muted, photo, smoothstep(0.0, 0.5, since)), shown);
+  }
   // Planning guides: the photo's own outline and four hairlines that cut it into thirds.
   // They belong to the photo, so they turn and move with it and show how it sits in the frame.
   if (uGuides > 0.0) {

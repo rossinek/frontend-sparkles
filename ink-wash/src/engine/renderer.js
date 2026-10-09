@@ -59,7 +59,16 @@ export const MOTIONS = {
 }
 
 /** How long the animation runs: longer when the camera moves, so the sheet can finish. */
-export const durationFor = framing => (framing.still ? TIMELINE.duration : PULL.total)
+const mainDuration = framing => (framing.still ? TIMELINE.duration : PULL.total)
+
+// The optional outro: the camera snaps back to the photo's own frame while the photo starts
+// to spread back over the painting from the middle; as the camera lands, more blots burst in
+// near the edges. Seconds, counted from the end of the animation; the blots' own timing is
+// in the COMPOSITE shader.
+const OUTRO = { camera: 0.5, total: 1.5 }
+
+/** How long everything runs, with the outro if it is on. */
+export const durationFor = (framing, outro = false) => mainDuration(framing) + (outro ? OUTRO.total : 0)
 
 // How far each part of the camera move has come at time t, 0…1.
 function pullAt(t, motion) {
@@ -115,7 +124,7 @@ export function createRenderer(canvas) {
   gl.bindVertexArray(vao)
   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1)
 
-  const state = { width: 0, height: 0, source: null, ready: false, tint: 0, seed: 1, levels: [0, 1], hatching: 0.5, focus: 1, lines: 'sketch', sketchOnly: false, planning: false, guides: 0, matteView: false, background: 0.8, finished: false, motion: 'rhythmic', framing: { rotation: 0, scale: 1, pan: [0, 0], still: true } }
+  const state = { width: 0, height: 0, source: null, ready: false, tint: 0, seed: 1, levels: [0, 1], hatching: 0.5, focus: 1, lines: 'sketch', sketchOnly: false, planning: false, guides: 0, matteView: false, outro: false, background: 0.8, finished: false, motion: 'rhythmic', framing: { rotation: 0, scale: 1, pan: [0, 0], still: true } }
   const textures = {}
   const targets = {}
 
@@ -354,7 +363,11 @@ export function createRenderer(canvas) {
     // While the frame is being planned, show where it ends up: the last moment, camera arrived.
     state.guides += ((state.planning ? 1 : 0) - state.guides) * 0.25 // eased in and out, frame by frame
     // The Reach preview shows the plain photo, so the camera stays where it starts.
-    const t = state.matteView ? 0 : state.planning || state.finished ? durationFor(framing) : Math.min(Math.max(time, 0), durationFor(framing))
+    // Previews of the finished picture show the end of the painting, before any outro.
+    const end = mainDuration(framing)
+    const clock = state.matteView ? 0 : state.planning || state.finished ? end : Math.min(Math.max(time, 0), durationFor(framing, state.outro))
+    const t = Math.min(clock, end) // the painting itself stops here
+    const after = clock - end      // seconds into the outro
     // The camera goes from the photo filling the viewport to the planned frame. Left where
     // it is, it keeps the slow push-in the animation always had.
     let camera = { rotation: 0, scale: 1 + 0.035 * (t / TIMELINE.duration), pan: [0, 0] }
@@ -368,6 +381,15 @@ export function createRenderer(canvas) {
         rotation: framing.rotation * done.turn,
         scale: Math.exp(Math.log(framing.scale) * done.zoom),
         pan: [framing.pan[0] * done.x, framing.pan[1] * done.y],
+      }, state.width / state.height, WIDE)
+    }
+    // Outro: one fast push back to the photo's own frame, braking hard.
+    if (after > 0) {
+      const back = 1 - (1 - Math.min(after / OUTRO.camera, 1)) ** 4
+      camera = effective({
+        rotation: camera.rotation * (1 - back),
+        scale: Math.exp(Math.log(camera.scale) * (1 - back)),
+        pan: [camera.pan[0] * (1 - back), camera.pan[1] * (1 - back)],
       }, state.width / state.height, WIDE)
     }
     const angle = (camera.rotation * Math.PI) / 180
@@ -397,6 +419,7 @@ export function createRenderer(canvas) {
       uPull: pull,
       uPullStart: pulledBack ? PULL.start : 1e6, // never, when the frame stays put
       uTime: t,
+      uOutro: after > 0 ? after : -1,
     })
   }
 
@@ -418,6 +441,7 @@ export function createRenderer(canvas) {
     /** @param {{ rotation: number, scale: number, pan: [number, number], still: boolean }} framing as returned by effective() */
     setFraming: framing => { state.framing = framing },
     setPlanning: value => { state.planning = value },
+    setOutro: value => { state.outro = value },
     /** 1 keeps the background's detail in the wash; lower values blur it away. */
     setBackground: value => {
       state.background = value
