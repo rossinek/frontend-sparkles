@@ -65,6 +65,70 @@ void main() {
   outColor = vec4(line, fine, edge, 1.0);
 }`
 
+// The background alone, ready to be blurred without the subject bleeding into it:
+// R = luminance where there is no subject, G = how much of the pixel is background.
+// Dividing a blurred R by a blurred G gives the background's own average tone.
+export const GROUND = `#version 300 es
+precision highp float;
+in vec2 vUv;
+out vec4 outColor;
+uniform sampler2D uSketch, uMatte;
+void main() {
+  float ground = 1.0 - smoothstep(0.3, 0.7, texture(uMatte, vUv).r);
+  outColor = vec4(texture(uSketch, vUv).g * ground, ground, 0.0, 1.0);
+}`
+
+// Background details, step 1: a median of the background on a reduced grid. The grid's
+// resolution sets the radius (5 × 5 texels, each 2^uLod pixels wide). Unlike a Gaussian, a
+// median wipes out small things and keeps the borders between large areas where they are.
+// Where the subject stands there is no background, so those taps are filled in from a wider
+// average of the background around it.
+export const MEDIAN = `#version 300 es
+precision highp float;
+in vec2 vUv;
+out vec4 outColor;
+uniform sampler2D uGround;
+uniform vec2 uTexel;
+uniform float uLod;
+float tap(vec2 uv) {
+  vec2 g = textureLod(uGround, uv, uLod).rg;
+  if (g.g < 0.25) g = textureLod(uGround, uv, uLod + 2.5).rg;
+  if (g.g < 0.1) g = textureLod(uGround, uv, 9.0).rg;
+  return g.r / max(g.g, 1e-3);
+}
+void main() {
+  float v[25];
+  for (int j = 0; j < 5; j++) {
+    for (int i = 0; i < 5; i++) v[j * 5 + i] = tap(vUv + vec2(float(i - 2), float(j - 2)) * uTexel);
+  }
+  for (int a = 1; a < 25; a++) {
+    float key = v[a];
+    int b = a - 1;
+    while (b >= 0 && v[b] > key) {
+      v[b + 1] = v[b];
+      b--;
+    }
+    v[b + 1] = key;
+  }
+  outColor = vec4(vec3(v[12]), 1.0);
+}`
+
+// Background details, step 2: the same stroke detection as SKETCH, run on the simplified
+// background. R: line, G: its luminance (what the wash is painted from).
+export const GROUND_SKETCH = `#version 300 es
+precision highp float;
+in vec2 vUv;
+out vec4 outColor;
+uniform sampler2D uFine, uMid, uCoarse;
+void main() {
+  float fine = texture(uFine, vUv).r;
+  float mid = texture(uMid, vUv).r;
+  float coarse = texture(uCoarse, vUv).r;
+  float thin = smoothstep(0.013, 0.075, (mid - fine) / (mid + 0.14));
+  float broad = smoothstep(0.03, 0.14, (coarse - mid) / (coarse + 0.14));
+  outColor = vec4(clamp(thin + broad * 0.45, 0.0, 1.0), fine, 0.0, 1.0);
+}`
+
 export const PROBE = `#version 300 es
 precision highp float;
 in vec2 vUv;
@@ -213,6 +277,10 @@ uniform float uTint, uSeed, uStage, uTime, uSketchOnly, uPad;
 // that takes a viewport point (in viewport heights) back onto the photo.
 uniform vec2 uPan, uCamX, uCamY;
 uniform float uGuides; // 0…1: thirds drawn over the photo while the final frame is planned
+uniform sampler2D uGroundSketch; // the simplified background: R its lines, G its luminance
+uniform float uBackground;       // 1 keeps the background's detail; lower simplifies it before painting
+uniform float uGroundOn;         // 0 at full detail, where the untouched background is used
+uniform float uGroundLod;        // how coarse the simplification is, in mip levels
 uniform sampler2D uMatteTry; // the subject being tried out with Reach
 uniform float uMatteView;    // 1 while it is shown
 // uPull runs 0…1 as the camera moves to the planned frame; uPullStart is when it begins (s).
@@ -398,7 +466,9 @@ void main() {
   float settle = smoothstep(0.0, 1.1, inkAge);
   float lod = max(4.5 * (1.0 - settle) * (1.0 - settle), 3.0 * dissolve);
   float luma = mix(dot(textureLod(uPhoto, uv, lod).rgb, vec3(0.299, 0.587, 0.114)), far.r, dissolve);
-  float lumaWash = mix(textureLod(uSketch, uv, 2.5).g, far.g, dissolve);
+  // Background details: below full, the wash is painted from the simplified background.
+  float lumaNear = mix(textureLod(uSketch, uv, 2.5).g, textureLod(uGroundSketch, uv, 2.5).g, uGroundOn);
+  float lumaWash = mix(lumaNear, far.g, dissolve);
   float low = fbm(p * 3.1 + uSeed * 2.3);
   float bleed = textureLod(uMatte, uv + wobble * 0.03 / uAspect, 1.5 + 2.5 * (1.0 - settle)).r;
   float inkMatte = smoothstep(0.28, 0.62, mix(bleed, far.b, dissolve) + (low - 0.5) * 0.22) * carry;
@@ -430,7 +500,7 @@ void main() {
   density *= 1.0 - 0.16 * settle * smoothstep(0.6, 0.66, fbm(p * 10.0 + uSeed * 7.0) + feather * 0.1);
   float rim = exp(-max(inkAge, 0.0) / 0.16);
   density += rim * (0.07 + 0.4 * density);
-  density += field.b * 0.3 * settle * (0.3 + inkMatte) * (1.0 - dissolve);
+  density += field.b * 0.3 * settle * (0.3 + inkMatte) * (1.0 - dissolve) * mix(uBackground, 1.0, inkMatte);
   // Past the photo the ink thins out to nothing, with no edge: it runs further where it is
   // dark, and breaks into wisps as it goes.
   // How far it runs varies along the edge: in places it gives out before the old edge, in
@@ -456,12 +526,14 @@ void main() {
   density += (1.0 - cover) * seep * seep * 0.13 * (0.35 + 0.65 * inkMatte);
 
   vec3 sepia = vec3(0.3, 0.2, 0.125);
-  vec3 hue = textureLod(uPhoto, uv, lod + 1.0).rgb + 0.02;
+  vec3 hue = textureLod(uPhoto, uv, mix(max(lod + 1.0, uGroundLod + 2.5), lod + 1.0, inkMatte)).rgb + 0.02;
   hue /= max(hue.r, max(hue.g, hue.b));
   vec3 pigment = mix(sepia, clamp(mix(vec3(0.8, 0.72, 0.6), hue, 0.8) * 0.4, 0.02, 0.9), uTint);
   vec3 painted = paper * pow(pigment, vec3(density));
 
-  float inkLine = max(lead.g, sketch.r * (1.0 - subject) * (1.0 - dissolve)) * cover * mix(0.3, 1.0, inkMatte) * (0.4 + 0.6 * settle);
+  // The background's lines are found again on the simplified background, not blurred.
+  float groundLine = mix(sketch.r, texture(uGroundSketch, uv).r, uGroundOn);
+  float inkLine = max(lead.g, groundLine * (1.0 - subject) * (1.0 - dissolve)) * cover * mix(0.3, 1.0, inkMatte) * (0.4 + 0.6 * settle);
   painted *= mix(vec3(1.0), vec3(0.2, 0.14, 0.1), inkLine * 0.75);
   // Pencil darkens once the ink soaks it. The wash itself is untouched. In a light wash the
   // strokes turn a deep graphite; in a dark one they go fully black and heavier, which is

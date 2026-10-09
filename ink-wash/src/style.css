@@ -254,6 +254,8 @@ canvas {
   line-height: 1.45;
 }
 
+.section-note strong { color: var(--text); font-weight: 600; }
+
 .field {
   display: flex;
   flex-direction: column;

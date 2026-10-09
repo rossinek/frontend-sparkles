@@ -1,4 +1,4 @@
-import { VERTEX, LUMA, BLUR, SKETCH, PROBE, HATCH, COMPOSITE } from './shaders.js'
+import { VERTEX, LUMA, BLUR, SKETCH, GROUND, MEDIAN, GROUND_SKETCH, PROBE, HATCH, COMPOSITE } from './shaders.js'
 import { buildFields, extendSheet } from './fields.js'
 import { buildGuides, GUIDE_SIZE } from './guides.js'
 import { effective } from './framing.js'
@@ -104,6 +104,9 @@ export function createRenderer(canvas) {
     luma: createProgram(gl, vertex, LUMA),
     blur: createProgram(gl, vertex, BLUR),
     sketch: createProgram(gl, vertex, SKETCH),
+    ground: createProgram(gl, vertex, GROUND),
+    median: createProgram(gl, vertex, MEDIAN),
+    groundSketch: createProgram(gl, vertex, GROUND_SKETCH),
     probe: createProgram(gl, vertex, PROBE),
     hatch: createProgram(gl, vertex, HATCH),
     composite: createProgram(gl, vertex, COMPOSITE),
@@ -112,7 +115,7 @@ export function createRenderer(canvas) {
   gl.bindVertexArray(vao)
   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1)
 
-  const state = { width: 0, height: 0, source: null, ready: false, tint: 0, seed: 1, levels: [0, 1], hatching: 0.5, focus: 1, lines: 'sketch', sketchOnly: false, planning: false, guides: 0, matteView: false, motion: 'rhythmic', framing: { rotation: 0, scale: 1, pan: [0, 0], still: true } }
+  const state = { width: 0, height: 0, source: null, ready: false, tint: 0, seed: 1, levels: [0, 1], hatching: 0.5, focus: 1, lines: 'sketch', sketchOnly: false, planning: false, guides: 0, matteView: false, background: 0.8, finished: false, motion: 'rhythmic', framing: { rotation: 0, scale: 1, pan: [0, 0], still: true } }
   const textures = {}
   const targets = {}
 
@@ -218,6 +221,12 @@ export function createRenderer(canvas) {
     draw(programs.sketch, 'sketch', { uFine: 'fine', uMid: 'mid', uCoarse: 'coarse', uMatte: 'matte' }, { uTexel: [1 / width, 1 / height], uDetail: 0.5 })
     gl.bindTexture(gl.TEXTURE_2D, textures.sketch)
     gl.generateMipmap(gl.TEXTURE_2D)
+    target('ground', width, height, { mipmaps: true })
+    draw(programs.ground, 'ground', { uSketch: 'sketch', uMatte: 'matte' })
+    gl.bindTexture(gl.TEXTURE_2D, textures.ground)
+    gl.generateMipmap(gl.TEXTURE_2D)
+    target('groundSketch', width, height, { mipmaps: true })
+    drawGround()
 
     state.lines = maps.line ? 'line' : 'sketch'
     if (maps.line) upload('line', asCanvas(maps.line))
@@ -233,6 +242,35 @@ export function createRenderer(canvas) {
     floatTexture('guideSide', guides.width, guides.height, guides.side)
     reseed(seed)
     drawPencil()
+  }
+
+  // How coarse the background is made, in mip levels: 0 at full detail, 5.5 at none.
+  const groundLod = () => (1 - state.background) * 5.5
+
+  // Background details: simplify the background with a median, then find its strokes again,
+  // exactly as the sketch was found on the photo. A handful of passes, so it reruns on every
+  // slider move. At full detail nothing is drawn and the untouched background is used.
+  function drawGround() {
+    if (state.background >= 0.999) return
+    const { width, height } = state
+    const lod = groundLod()
+    const w = Math.max(8, Math.round(width / 2 ** lod))
+    const h = Math.max(8, Math.round(height / 2 ** lod))
+    for (const name of ['groundMedian', 'groundScratch', 'groundSoft']) target(name, w, h, { float: true })
+    draw(programs.median, 'groundMedian', { uGround: 'ground' }, { uTexel: [1 / w, 1 / h], uLod: lod })
+    // A blur on the median's own grid, so on the full picture it grows with the median: the
+    // coarser the grid, the wider the blur, and the blocks of the enlarged median melt away.
+    const sigma = Math.min(1.4, 0.3 + lod)
+    draw(programs.blur, 'groundScratch', { uSource: 'groundMedian' }, { uStep: [1 / w, 0], uSigma: sigma })
+    draw(programs.blur, 'groundSoft', { uSource: 'groundScratch' }, { uStep: [0, 1 / h], uSigma: sigma })
+    // The blurred-luminance targets from prepare() are free again once the sketch is drawn.
+    const scale = Math.max(width, height) / 1000
+    blur('groundSoft', 'fine', 0.9 * scale)
+    blur('groundSoft', 'mid', 1.7 * scale)
+    blur('groundSoft', 'coarse', 4.5 * scale)
+    draw(programs.groundSketch, 'groundSketch', { uFine: 'fine', uMid: 'mid', uCoarse: 'coarse' })
+    gl.bindTexture(gl.TEXTURE_2D, textures.groundSketch)
+    gl.generateMipmap(gl.TEXTURE_2D)
   }
 
   // One full-screen pass, so it is rerun on every slider move.
@@ -316,7 +354,7 @@ export function createRenderer(canvas) {
     // While the frame is being planned, show where it ends up: the last moment, camera arrived.
     state.guides += ((state.planning ? 1 : 0) - state.guides) * 0.25 // eased in and out, frame by frame
     // The Reach preview shows the plain photo, so the camera stays where it starts.
-    const t = state.matteView ? 0 : state.planning ? durationFor(framing) : Math.min(Math.max(time, 0), durationFor(framing))
+    const t = state.matteView ? 0 : state.planning || state.finished ? durationFor(framing) : Math.min(Math.max(time, 0), durationFor(framing))
     // The camera goes from the photo filling the viewport to the planned frame. Left where
     // it is, it keeps the slow push-in the animation always had.
     let camera = { rotation: 0, scale: 1 + 0.035 * (t / TIMELINE.duration), pan: [0, 0] }
@@ -335,7 +373,11 @@ export function createRenderer(canvas) {
     const angle = (camera.rotation * Math.PI) / 180
     const cos = Math.cos(angle) / camera.scale
     const sin = Math.sin(angle) / camera.scale
-    draw(programs.composite, null, { uPhoto: 'photo', uSketch: 'sketch', uPencil: 'pencil', uPencilWide: 'pencilWide', uMatte: 'matte', uField: 'field', uField2: 'field2', uSheet: 'sheet', uMatteTry: state.matteView ? 'matteTry' : 'matte' }, {
+    draw(programs.composite, null, { uPhoto: 'photo', uSketch: 'sketch', uPencil: 'pencil', uPencilWide: 'pencilWide', uMatte: 'matte', uField: 'field', uField2: 'field2', uSheet: 'sheet', uMatteTry: state.matteView ? 'matteTry' : 'matte', uGroundSketch: 'groundSketch' }, {
+      uBackground: state.background,
+      // The last few percent ease into the untouched background, so 100% is exactly as before.
+      uGroundOn: 1 - Math.min(Math.max((state.background - 0.96) / 0.039, 0), 1),
+      uGroundLod: groundLod(),
       uMatteView: state.matteView ? 1 : 0,
       uAspect: [state.width / state.height, 1],
       uSize: [state.width, state.height],
@@ -376,6 +418,13 @@ export function createRenderer(canvas) {
     /** @param {{ rotation: number, scale: number, pan: [number, number], still: boolean }} framing as returned by effective() */
     setFraming: framing => { state.framing = framing },
     setPlanning: value => { state.planning = value },
+    /** 1 keeps the background's detail in the wash; lower values blur it away. */
+    setBackground: value => {
+      state.background = value
+      if (state.ready) drawGround()
+    },
+    /** Shows the last moment of the animation, to judge a setting that changes the painting. */
+    setFinishedPreview: value => { state.finished = value },
     /** Shows a matte over the photo without rebuilding anything; null goes back to the picture. */
     setMattePreview: map => {
       if (map) upload('matteTry', asCanvas(map))

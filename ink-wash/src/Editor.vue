@@ -21,6 +21,7 @@ const colour = ref(false)
 const hatching = ref(0.5)
 const focus = ref(1)
 const reach = ref(0)
+const background = ref(0.8)
 const hasDepth = ref(false)
 const dragging = ref(false)
 // The final frame as the user asked for it. What is shown is `framing`, which holds these
@@ -215,6 +216,18 @@ function applyReach() {
   renderer.setMattePreview(null)
   time.value = reducedMotion ? duration.value : 0
   playing.value = !reducedMotion
+}
+
+// Background details only changes how the wash is painted, so it shows at once, on the
+// finished picture.
+function setBackground(event) {
+  background.value = Number(event.target.value)
+  renderer.setBackground(background.value)
+  renderer.setFinishedPreview(true)
+}
+
+function endFinishedPreview() {
+  renderer.setFinishedPreview(false)
 }
 
 function setFocus(event) {
@@ -423,7 +436,24 @@ onBeforeUnmount(() => {
               @change="applyReach"
               @blur="endReachPreview"
             >
-            <small>Grows the subject to things at a similar depth that the cut-out missed. The outline shows what is included; it applies when you let go.</small>
+            <small>Grows the subject to things at a similar depth that the cut-out missed.</small>
+          </label>
+          <label class="field">
+            <span class="field-head"><span>Background details</span><output>{{ Math.round(background * 100) }}%</output></span>
+            <input
+              class="scrubber"
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              :value="background"
+              :disabled="!ready"
+              :style="{ '--progress': `${background * 100}%` }"
+              @input="setBackground"
+              @change="endFinishedPreview"
+              @blur="endFinishedPreview"
+            >
+            <small>How much of the background shows in the wash behind the subject.</small>
           </label>
         </PanelSection>
 
@@ -470,7 +500,7 @@ onBeforeUnmount(() => {
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 1.45-4.59M5 3.5v4h4" /></svg>
             </button>
           </template>
-          <p class="section-note">Where the photo ends up once the paper has covered it and the camera moves. Drag the picture to place it.</p>
+          <p class="section-note">Where the photo ends up once the paper has covered it and the camera moves. <strong>Drag the picture to place it.</strong></p>
           <label class="field">
             <span class="field-head"><span>Rotate</span><output>{{ rotation.toFixed(1) }}°</output></span>
             <input
