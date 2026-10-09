@@ -112,7 +112,7 @@ export function createRenderer(canvas) {
   gl.bindVertexArray(vao)
   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1)
 
-  const state = { width: 0, height: 0, source: null, ready: false, tint: 0, seed: 1, levels: [0, 1], hatching: 0.5, focus: 1, lines: 'sketch', sketchOnly: false, planning: false, guides: 0, motion: 'rhythmic', framing: { rotation: 0, scale: 1, pan: [0, 0], still: true } }
+  const state = { width: 0, height: 0, source: null, ready: false, tint: 0, seed: 1, levels: [0, 1], hatching: 0.5, focus: 1, lines: 'sketch', sketchOnly: false, planning: false, guides: 0, matteView: false, motion: 'rhythmic', framing: { rotation: 0, scale: 1, pan: [0, 0], still: true } }
   const textures = {}
   const targets = {}
 
@@ -315,7 +315,8 @@ export function createRenderer(canvas) {
     if (!state.width) return
     // While the frame is being planned, show where it ends up: the last moment, camera arrived.
     state.guides += ((state.planning ? 1 : 0) - state.guides) * 0.25 // eased in and out, frame by frame
-    const t = state.planning ? durationFor(framing) : Math.min(Math.max(time, 0), durationFor(framing))
+    // The Reach preview shows the plain photo, so the camera stays where it starts.
+    const t = state.matteView ? 0 : state.planning ? durationFor(framing) : Math.min(Math.max(time, 0), durationFor(framing))
     // The camera goes from the photo filling the viewport to the planned frame. Left where
     // it is, it keeps the slow push-in the animation always had.
     let camera = { rotation: 0, scale: 1 + 0.035 * (t / TIMELINE.duration), pan: [0, 0] }
@@ -334,7 +335,8 @@ export function createRenderer(canvas) {
     const angle = (camera.rotation * Math.PI) / 180
     const cos = Math.cos(angle) / camera.scale
     const sin = Math.sin(angle) / camera.scale
-    draw(programs.composite, null, { uPhoto: 'photo', uSketch: 'sketch', uPencil: 'pencil', uPencilWide: 'pencilWide', uMatte: 'matte', uField: 'field', uField2: 'field2', uSheet: 'sheet' }, {
+    draw(programs.composite, null, { uPhoto: 'photo', uSketch: 'sketch', uPencil: 'pencil', uPencilWide: 'pencilWide', uMatte: 'matte', uField: 'field', uField2: 'field2', uSheet: 'sheet', uMatteTry: state.matteView ? 'matteTry' : 'matte' }, {
+      uMatteView: state.matteView ? 1 : 0,
       uAspect: [state.width / state.height, 1],
       uSize: [state.width, state.height],
       uPaper: TIMELINE.paper,
@@ -374,6 +376,11 @@ export function createRenderer(canvas) {
     /** @param {{ rotation: number, scale: number, pan: [number, number], still: boolean }} framing as returned by effective() */
     setFraming: framing => { state.framing = framing },
     setPlanning: value => { state.planning = value },
+    /** Shows a matte over the photo without rebuilding anything; null goes back to the picture. */
+    setMattePreview: map => {
+      if (map) upload('matteTry', asCanvas(map))
+      state.matteView = !!map
+    },
     /** @param {keyof typeof MOTIONS} value */
     setMotion: value => { state.motion = value },
     get ready() { return state.ready },

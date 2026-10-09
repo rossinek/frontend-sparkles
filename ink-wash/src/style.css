@@ -37,6 +37,11 @@ body {
   gap: 20px;
 }
 
+a { color: inherit; }
+
+h1 a { text-decoration: none; }
+h1 a:hover { color: var(--accent); }
+
 h1 {
   margin: 0;
   font-size: 15px;
@@ -168,12 +173,11 @@ canvas {
   scrollbar-width: thin;
 }
 
-.panel > button.wide { margin-bottom: 10px; padding-block: 13px; }
+.panel > button.wide { margin-bottom: 16px; padding-block: 13px; }
 
 .panel-actions {
   display: flex;
   gap: 10px;
-  padding-bottom: 16px;
 }
 
 .panel-actions button { flex: 1; }
@@ -358,12 +362,194 @@ canvas { touch-action: none; }
   text-align: center;
 }
 
+/* Start screen: what it is on the left, where the photo comes from on the right. */
+.start {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 72px;
+  max-width: 1240px;
+  min-height: 100%;
+  margin: 0 auto;
+  padding: 40px 32px;
+}
+
+.start-intro, .start-source { display: flex; flex-direction: column; min-width: 0; }
+
+.start h1 { font-size: 17px; }
+
+.lead {
+  max-width: 17em;
+  margin: 22px 0 0;
+  font-size: 34px;
+  font-weight: 300;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+.facts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 24px 0 0;
+  padding: 0;
+  color: var(--muted);
+  font-size: 14px;
+  list-style: none;
+}
+
+.facts strong {
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.facts strong::after {
+  content: '·';
+  margin: 0 5px 0 7px; /* the label's own letter-spacing and the following space even this out */
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.example { margin: 36px 0 0; }
+
+.example figcaption, .fine, .samples a:not(.sample) {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* The credit hangs under the after print and turns with it. */
+.example figcaption {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 12px;
+}
+
+/* Before and after as two prints laid down one after the other, slightly askew. */
+.prints { padding: 6px 0 34px; }
+
+.print {
+  position: relative;
+  width: 62%;
+  box-shadow: 0 18px 44px rgb(0 0 0 / 0.5);
+}
+
+.print img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.print span {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  padding: 4px 10px;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  background: rgb(20 22 24 / 0.7);
+  border-radius: 100px;
+  backdrop-filter: blur(6px);
+}
+
+.print.before { transform: rotate(-2.5deg); }
+
+.print.after {
+  margin: -13% 0 0 38%;
+  box-shadow: 0 6px 16px rgb(0 0 0 / 0.55), 0 30px 70px rgb(0 0 0 / 0.8);
+  transform: rotate(1.8deg);
+}
+
+.dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 230px;
+  padding: 28px;
+  color: var(--muted);
+  font-size: 13px;
+  background: rgb(32 35 34 / 0.5);
+  border: 1px dashed var(--border);
+  border-radius: 14px;
+}
+
+.dropzone svg {
+  width: 30px;
+  height: 30px;
+  margin-bottom: 10px;
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.dropzone strong { color: var(--text); font-size: 17px; font-weight: 500; }
+.dropzone:hover, .dropzone.over { background: rgb(203 222 188 / 0.07); border-color: var(--accent); }
+
+.problem { margin: 10px 0 0; color: #e8a08f; font-size: 13px; }
+
+.start-source h2 {
+  margin: 34px 0 14px;
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.samples {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.samples li { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+
+.sample {
+  display: block;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  background: var(--surface);
+  border-radius: 8px;
+  outline: 1px solid transparent;
+  transition: outline-color 0.15s;
+}
+
+.sample img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.35s ease;
+}
+
+.sample img.portrait { object-position: center 32%; }
+.sample:hover, .sample:focus-visible { outline-color: var(--accent); }
+.sample:hover img { transform: scale(1.04); }
+.samples a:not(.sample) { text-decoration: none; }
+.samples a:not(.sample):hover, .example a:hover, .note a:hover { color: var(--accent); }
+
+.fine { margin: 26px 0 0; }
+
 @media (prefers-reduced-motion: reduce) {
-  .panel-body, .panel-toggle svg { transition: none; }
+  .panel-body, .panel-toggle svg, .sample img { transition: none; }
 }
 
 @media (max-width: 900px) {
   html, body, #app { height: auto; }
+  .start { grid-template-columns: minmax(0, 1fr); gap: 44px; padding: 28px 20px; }
+  .lead { font-size: 27px; }
   .app { height: auto; min-height: 100dvh; }
   .workspace { grid-template-columns: minmax(0, 1fr); gap: 20px; }
   .panel { overflow: visible; }

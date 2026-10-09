@@ -213,6 +213,8 @@ uniform float uTint, uSeed, uStage, uTime, uSketchOnly, uPad;
 // that takes a viewport point (in viewport heights) back onto the photo.
 uniform vec2 uPan, uCamX, uCamY;
 uniform float uGuides; // 0…1: thirds drawn over the photo while the final frame is planned
+uniform sampler2D uMatteTry; // the subject being tried out with Reach
+uniform float uMatteView;    // 1 while it is shown
 // uPull runs 0…1 as the camera moves to the planned frame; uPullStart is when it begins (s).
 uniform float uPull, uPullStart;
 uniform vec2 uLevels;
@@ -318,6 +320,15 @@ void main() {
   vec2 uv = vec2(dot(uCamX, view), dot(uCamY, view)) / uAspect + 0.5;
   vec2 p = uv * uAspect;
   vec3 photo = texture(uPhoto, uv).rgb;
+  // Reach preview: the photo with everything outside the subject dimmed and the edge drawn.
+  if (uMatteView > 0.5) {
+    float m = texture(uMatteTry, uv).r;
+    vec3 outside = vec3(dot(photo, vec3(0.299, 0.587, 0.114))) * 0.3;
+    vec3 shown = mix(outside, photo, smoothstep(0.3, 0.7, m));
+    float edge = 1.0 - smoothstep(0.8, 2.2, abs(m - 0.5) / max(fwidth(m), 1e-4));
+    outColor = vec4(mix(shown, vec3(0.8, 0.87, 0.74), edge * 0.9), 1.0);
+    return;
+  }
   if (uStage < 0.5) {
     outColor = vec4(photo, 1.0);
     return;
