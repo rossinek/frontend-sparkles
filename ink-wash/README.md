@@ -27,7 +27,7 @@ pnpm preview
 - **Play / pause** with the button, a click on the picture, or the space bar. The scrubber seeks anywhere in the animation.
 - **New pour** keeps the photo but picks new starting points and paper.
 - **Colour** tints the ink with the photo's own hues instead of plain sepia.
-- **Reach** grows the subject along the depth map to take in objects and limbs the cut-out missed. At zero the cut-out is used as it is. It applies when you let go of the slider and restarts the animation; it is hidden when the depth model did not load.
+- **Reach** grows the subject along the depth map to take in objects and limbs the cut-out missed. At zero the cut-out is used as it is; at 100% the subject is the whole picture. It applies when you let go of the slider and restarts the animation; it is hidden when the depth model did not load.
 - **Background details** sets how much of the background shows in the wash behind the subject. It starts at 80%. At 100% nothing is changed; below that the background is simplified with a median filter before it is painted, and its strokes are found again on the simplified picture: small things go first, the borders between large areas stay where they are, and at zero only a plain wash is left. The background is whatever the cut-out and Reach left out.
 - **Hatching** sets how much pencil hatching there is; at zero only the contours remain.
 - **Rotate**, **Scale**, and dragging the picture plan the final frame: where the photo ends up once the camera has moved. Scale runs from 0.6×, where the photo sits small on a wide sheet of paper, to 2×. While you plan, the finished frame is shown with the photo's outline and thirds drawn over it, and it stays up for a moment after you let go. **Reset frame** puts the camera back.

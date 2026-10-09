@@ -2,12 +2,15 @@
 // cut-out model left behind. It runs on the CPU, once, before the matte goes to the
 // renderer; everything downstream just sees a larger subject.
 
-// At full reach, how far outside the subject's own depth range a pixel may lie (depth is 0…255).
-const MAX_TOLERANCE = 40
-// At full reach, how far from the original matte the growth may travel, as a share of the
-// long side. Without this a floor or table at the subject's depth floods the whole frame
-// at the first notch of the slider; with it the subject grows outwards gradually.
-const MAX_TRAVEL = 0.3
+// How far outside the subject's own depth range a pixel may lie (depth is 0…255), and how far
+// from the original matte the growth may travel, as a share of the long side. Without the
+// second limit a floor or table at the subject's depth floods the frame at the first notch
+// of the slider; with it the subject grows outwards gradually.
+//
+// Both grow gently over most of the slider and then open up towards the end, so that at
+// full reach every depth is accepted at any distance: the subject is the whole picture.
+const tolerance = reach => 40 * reach + 215 * reach ** 10
+const travel = reach => 0.3 * reach + 1.7 * reach ** 10
 
 // Two box passes: a soft, roughly Gaussian edge.
 function blur(src, w, h, radius) {
@@ -36,13 +39,14 @@ function blur(src, w, h, radius) {
 /**
  * @param {{ width: number, height: number, data: Uint8Array }} matte the cut-out as it came from the model
  * @param {{ width: number, height: number, data: Uint8Array } | null} depth 255 = near
- * @param {number} reach 0…1; 0 returns the matte untouched
+ * @param {number} reach 0…1; 0 returns the matte untouched, 1 covers the whole picture
  * @returns {{ width: number, height: number, data: Uint8Array }}
  */
 export function growMatte(matte, depth, reach) {
   if (!depth || reach <= 0) return matte
   const { width: w, height: h } = matte
   const n = w * h
+  if (reach >= 0.999) return { width: w, height: h, data: new Uint8Array(n).fill(255) }
 
   // Depth at the matte's resolution.
   const near = new Uint8Array(n)
@@ -66,16 +70,15 @@ export function growMatte(matte, depth, reach) {
   let high = 255
   for (let seen = 0; low < 255 && seen + bins[low] < count * 0.05; low++) seen += bins[low]
   for (let seen = 0; high > 0 && seen + bins[high] < count * 0.05; high--) seen += bins[high]
-  const tolerance = reach * MAX_TOLERANCE
-  const from = low - tolerance
-  const to = high + tolerance
+  const from = low - tolerance(reach)
+  const to = high + tolerance(reach)
 
   // Flood outwards from the subject through neighbours whose depth is in range, so
   // everything taken in is connected to it.
   const grown = new Float32Array(n)
   const steps = new Int32Array(n) // travelled from the matte, in pixels; the queue is breadth-first
   const queue = new Int32Array(n)
-  const travel = Math.round(reach * MAX_TRAVEL * Math.max(w, h))
+  const limit = Math.round(travel(reach) * Math.max(w, h))
   let head = 0
   let tail = 0
   for (let i = 0; i < n; i++) {
@@ -92,7 +95,7 @@ export function growMatte(matte, depth, reach) {
   while (head < tail) {
     const i = queue[head++]
     const step = steps[i] + 1
-    if (step > travel) continue
+    if (step > limit) continue
     const x = i % w
     if (x > 0) visit(i - 1, step)
     if (x < w - 1) visit(i + 1, step)
