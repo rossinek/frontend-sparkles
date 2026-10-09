@@ -15,7 +15,7 @@ export const WIDE = 1 / 0.6
 export const TIMELINE = {
   paper: [0.3, 1.3, 1.7],
   ink: [0.85, 2.2, 2.0],
-  accent: [1.55, 2.6, 2.4],
+  accent: [1.1, 3.6, 2.4], // ends with the animation
   duration: 4.7,
 }
 

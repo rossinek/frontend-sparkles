@@ -328,7 +328,12 @@ vec3 agedPaper(vec2 p, vec2 uv, float tooth) {
 
 // The paper front starts slowly and bursts; ink surges and then creeps to a stop.
 float easeIn(float field, vec3 front) {
-  return front.x + front.y * pow(clamp(field, 0.0, 1.0), 1.0 / front.z);
+  // The paper's opening is quick: from the first dot, the front runs through the first half
+  // of its way (about a third of the picture) in 0.4 of the time, picking up speed as it
+  // goes. The rest of the picture takes the remainder at a steadier pace.
+  float f = clamp(field, 0.0, 1.0);
+  float g = f < 0.5 ? 0.4 * pow(f / 0.5, 1.4) : 0.4 + 0.6 * pow((f - 0.5) / 0.5, 0.85);
+  return front.x + front.y * g;
 }
 float easeOut(float field, vec3 front) {
   return front.x + front.y * (1.0 - pow(1.0 - clamp(field, 0.0, 1.0), 1.0 / front.z));
@@ -337,7 +342,11 @@ float easeOut(float field, vec3 front) {
 // spread over a slow tail, so the wash keeps finishing after the frame has pulled back
 // instead of all landing in the same instant.
 float inkArrival(float field) {
-  return easeOut(field, uInk) + 2.6 * (1.0 - exp(-max(field - 1.0, 0.0) * 0.5));
+  // The first wash opens quickly too: the front covers its first third in about a tenth of
+  // the time, then carries on as before, surging and creeping to a stop.
+  float f = clamp(field, 0.0, 1.0);
+  float g = f < 0.35 ? 0.11 * pow(f / 0.35, 1.2) : 0.11 + 0.89 * (1.0 - sqrt(1.0 - (f - 0.35) / 0.65));
+  return uInk.x + uInk.y * g + 2.6 * (1.0 - exp(-max(field - 1.0, 0.0) * 0.5));
 }
 
 // Blots dropped on the bare sheet around the photo. They are summed into one field
@@ -431,6 +440,7 @@ void main() {
   // --- Paper: a bleached, wet-looking cloud eats the photograph, then ages.
   // Ages are seconds since each front reached this pixel.
   float paperAge = uTime - easeIn(field.r + fine * 0.03, uPaper);
+  float feather = fbm(p * 24.0 + uSeed * 4.0) - 0.5;
   // While a sketch slider is dragged, show the finished drawing alone on dry paper.
   if (uSketchOnly > 0.5) paperAge = 10.0;
   // Past the photo the sheet ages in step with the last paper to arrive at the photo's edge;
@@ -458,9 +468,9 @@ void main() {
   float pencil = lead.r * subject * drawn * graphite;
 
   // --- Ink: arrives blurred and pale, then settles into the tones of the photograph.
-  float feather = fbm(p * 24.0 + uSeed * 4.0) - 0.5;
-  // Ink may follow closely behind the paper front, but never overtakes it.
-  float inkAge = min(uTime - inkArrival(field.g + feather * 0.022), paperAge - 0.12);
+  // Ink runs on its own clock, not behind the paper. Where it got there first it is already
+  // painted, unseen under the photograph, and the paper front uncovers it as it passes.
+  float inkAge = uTime - inkArrival(field.g + feather * 0.022);
   if (uSketchOnly > 0.5) inkAge = -10.0;
   // Past the edge the front has no crisp line: the wash soaks in slowly.
   float cover = smoothstep(0.0, mix(0.035, 0.45, smoothstep(0.0, 0.14, beyond)), inkAge);

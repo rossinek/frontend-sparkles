@@ -401,9 +401,12 @@ export function buildFields({ width: w, height: h, matte, luma, edge, seed, outs
     }
   }
   const paces = [0.5, 0.65, 0.9, 1.3, 1.9, 2.6].sort(() => rand() - 0.5)
+  // The first blots land all over the picture, subject and background alike, only leaning
+  // towards darker places, and each at its own moment.
+  const scatter = new Float32Array(n)
+  for (let i = 0; i < n; i++) scatter[i] = outside && outside[i] > 0 ? 0 : 0.3 + 0.7 * (1 - luma[i]) ** 2
   const inkSeeds = [
-    ...pickSeeds(w, h, darkness, 6, long * 0.1, rand).map((p, i) => ({ ...p, t: long * 0.34 * rand() ** 1.5, pace: paces[i] })),
-    ...(hasSubject ? pickSeeds(w, h, openness, 5, long * 0.2, rand).map(p => ({ ...p, t: long * range(0.28, 0.6), pace: range(0.6, 1.6) })) : []),
+    ...pickSeeds(w, h, scatter, 9, long * 0.13, rand).map((p, i) => ({ ...p, t: long * 0.32 * rand(), pace: paces[i % paces.length] })),
     ...pickSeeds(w, h, anywhere, 16, long * 0.04, rand).map(p => ({ ...p, t: long * range(0.08, 0.75), pace: range(3, 5.5) })),
   ]
   if (!inkSeeds.length) inkSeeds.push({ ...head, t: 0 })
