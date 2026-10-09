@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.1",
+    "@litertjs/core": "^2.5.3",
     "vue": "^3.5.43"
   },
   "devDependencies": {

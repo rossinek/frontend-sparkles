@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { createRenderer, TIMELINE, WORK_SIZE } from './engine/renderer.js'
+import { attention } from './engine/attention.js'
 
 const canvas = ref(null)
 const fileInput = ref(null)
@@ -9,8 +10,8 @@ const playing = ref(false)
 const ready = ref(false)
 const status = ref('Loading photo…')
 const colour = ref(false)
-const detail = ref(0.5)
-const shading = ref(0.5)
+const hatching = ref(0.5)
+const focus = ref(1)
 const dragging = ref(false)
 const isSample = ref(true)
 const unsupported = ref(false)
@@ -22,6 +23,7 @@ let frame = 0
 let last = 0
 let job = 0
 let seed = 7
+let looking = null
 
 const progress = computed(() => `${(time.value / TIMELINE.duration) * 100}%`)
 
@@ -37,35 +39,21 @@ function scaled(bitmap, limit) {
   return surface
 }
 
-function matteCanvas(width, height, alpha) {
-  const surface = document.createElement('canvas')
-  surface.width = width
-  surface.height = height
-  const context = surface.getContext('2d')
-  const image = context.createImageData(width, height)
-  for (let i = 0; i < alpha.length; i++) {
-    image.data[i * 4] = image.data[i * 4 + 1] = image.data[i * 4 + 2] = alpha[i]
-    image.data[i * 4 + 3] = 255
-  }
-  context.putImageData(image, 0, 0)
-  return surface
-}
-
 // Without a model the whole frame is painted, weighted towards the centre.
 function fallbackMatte() {
-  const surface = document.createElement('canvas')
-  surface.width = surface.height = 256
-  const context = surface.getContext('2d')
-  const gradient = context.createRadialGradient(128, 128, 40, 128, 128, 150)
-  gradient.addColorStop(0, '#fff')
-  gradient.addColorStop(1, '#000')
-  context.fillStyle = gradient
-  context.fillRect(0, 0, 256, 256)
-  return surface
+  const size = 256
+  const data = new Uint8Array(size * size)
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const distance = Math.hypot(x - size / 2, y - size / 2)
+      data[y * size + x] = Math.round(255 * Math.min(1, Math.max(0, (150 - distance) / 110)))
+    }
+  }
+  return { width: size, height: size, data }
 }
 
-function start(matte) {
-  renderer.prepare(matte, seed)
+function start(maps) {
+  renderer.prepare(maps, seed)
   ready.value = true
   status.value = ''
   time.value = reducedMotion ? TIMELINE.duration : 0
@@ -94,21 +82,28 @@ async function load(source, sample = false) {
   const small = scaled(bitmap, 1024)
   bitmap.close()
   const pixels = small.getContext('2d').getImageData(0, 0, small.width, small.height).data
-  status.value = 'Loading the background model…'
+  status.value = 'Loading the models…'
+  // Where the eye goes is found on the main thread while the worker runs the heavier models.
+  looking = attention(small).catch(error => {
+    console.warn('The attention model failed; hatching will ignore where the viewer looks.', error)
+    return null
+  })
   worker.postMessage({ id, pixels, width: small.width, height: small.height }, [pixels.buffer])
 }
 
-function onWorkerMessage({ data }) {
+async function onWorkerMessage({ data }) {
   if (data.type === 'progress') {
-    if (!ready.value) status.value = `Downloading the background model… ${Math.round(data.progress * 100)}%`
+    if (!ready.value) status.value = `Downloading the ${data.label}… ${Math.round(data.progress * 100)}%`
     return
   }
   if (data.id !== job) return
-  if (data.type === 'running') status.value = 'Separating the subject…'
-  else if (data.type === 'matte') start(matteCanvas(data.width, data.height, data.data))
-  else if (data.type === 'error') {
+  if (data.type === 'status') status.value = data.text
+  else if (data.type === 'maps') {
+    const seen = await looking
+    if (data.id === job) start({ matte: data.matte, line: data.line, depth: data.depth, attention: seen })
+  } else if (data.type === 'error') {
     console.warn('Background removal failed, painting the whole frame instead.', data.message)
-    start(fallbackMatte())
+    start({ matte: fallbackMatte() })
   }
 }
 
@@ -153,15 +148,15 @@ function toggleColour() {
 }
 
 // Dragging a sketch slider previews the bare drawing; releasing it returns to the animation.
-function setDetail(event) {
-  detail.value = Number(event.target.value)
-  renderer.setDetail(detail.value)
+function setHatching(event) {
+  hatching.value = Number(event.target.value)
+  renderer.setHatching(hatching.value)
   renderer.setSketchOnly(true)
 }
 
-function setShading(event) {
-  shading.value = Number(event.target.value)
-  renderer.setShading(shading.value)
+function setFocus(event) {
+  focus.value = Number(event.target.value)
+  renderer.setFocus(focus.value)
   renderer.setSketchOnly(true)
 }
 
@@ -196,7 +191,7 @@ onMounted(async () => {
     status.value = 'This experiment needs WebGL2, which is not available in this browser.'
     return
   }
-  worker = new Worker(new URL('./engine/matte.worker.js', import.meta.url), { type: 'module' })
+  worker = new Worker(new URL('./engine/models.worker.js', import.meta.url), { type: 'module' })
   worker.onmessage = onWorkerMessage
   window.addEventListener('keydown', onKey)
   last = performance.now()
@@ -261,33 +256,33 @@ onBeforeUnmount(() => {
 
     <div class="sketch-controls">
       <label>
-        <span>Sketch detail</span>
+        <span>Hatching</span>
         <input
           class="scrubber"
           type="range"
           min="0"
           max="1"
           step="0.01"
-          :value="detail"
+          :value="hatching"
           :disabled="!ready"
-          :style="{ '--progress': `${detail * 100}%` }"
-          @input="setDetail"
+          :style="{ '--progress': `${hatching * 100}%` }"
+          @input="setHatching"
           @change="endSketchPreview"
           @blur="endSketchPreview"
         >
       </label>
       <label>
-        <span>Sketch shading</span>
+        <span>Focus</span>
         <input
           class="scrubber"
           type="range"
           min="0"
           max="1"
           step="0.01"
-          :value="shading"
+          :value="focus"
           :disabled="!ready"
-          :style="{ '--progress': `${shading * 100}%` }"
-          @input="setShading"
+          :style="{ '--progress': `${focus * 100}%` }"
+          @input="setFocus"
           @change="endSketchPreview"
           @blur="endSketchPreview"
         >

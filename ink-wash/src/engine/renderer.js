@@ -1,5 +1,6 @@
-import { VERTEX, LUMA, BLUR, SKETCH, PROBE, COMPOSITE } from './shaders.js'
+import { VERTEX, LUMA, BLUR, SKETCH, PROBE, HATCH, COMPOSITE } from './shaders.js'
 import { buildFields } from './fields.js'
+import { buildGuides, GUIDE_SIZE } from './guides.js'
 
 export const WORK_SIZE = 1600
 const FIELD_SIZE = 512
@@ -47,13 +48,14 @@ export function createRenderer(canvas) {
     blur: createProgram(gl, vertex, BLUR),
     sketch: createProgram(gl, vertex, SKETCH),
     probe: createProgram(gl, vertex, PROBE),
+    hatch: createProgram(gl, vertex, HATCH),
     composite: createProgram(gl, vertex, COMPOSITE),
   }
   const vao = gl.createVertexArray()
   gl.bindVertexArray(vao)
   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1)
 
-  const state = { width: 0, height: 0, ready: false, tint: 0, seed: 1, levels: [0, 1], detail: 0.5, shading: 0.5, sketchOnly: false }
+  const state = { width: 0, height: 0, source: null, ready: false, tint: 0, seed: 1, levels: [0, 1], hatching: 0.5, focus: 1, lines: 'sketch', sketchOnly: false }
   const textures = {}
   const targets = {}
 
@@ -113,31 +115,78 @@ export function createRenderer(canvas) {
   function setImage(source) {
     state.width = source.width
     state.height = source.height
+    state.source = source
     state.ready = false
     upload('photo', source)
   }
 
-  /** @param {HTMLCanvasElement | OffscreenCanvas} matte white subject on black */
-  function prepare(matte, seed) {
+  // A greyscale model output as a canvas, so it uploads and flips like the photo does.
+  function asCanvas({ width, height, data }) {
+    const surface = document.createElement('canvas')
+    surface.width = width
+    surface.height = height
+    const context = surface.getContext('2d')
+    const image = context.createImageData(width, height)
+    for (let i = 0; i < data.length; i++) {
+      image.data[i * 4] = image.data[i * 4 + 1] = image.data[i * 4 + 2] = data[i]
+      image.data[i * 4 + 3] = 255
+    }
+    context.putImageData(image, 0, 0)
+    return surface
+  }
+
+  function floatTexture(name, width, height, data) {
+    texture(name)
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, width, height, 0, gl.RGBA, gl.FLOAT, data)
+  }
+
+  /**
+   * @param {{ matte: object, line?: object, depth?: object, attention?: object }} maps model
+   *   outputs as { width, height, data: Uint8 }. Only the matte is required: without the
+   *   line map the edge-detection lines are used, without depth the strokes keep one slant,
+   *   and without attention the whole subject is hatched from tone alone.
+   */
+  function prepare(maps, seed) {
     const { width, height } = state
     const scale = Math.max(width, height) / 1000
-    upload('matte', matte)
+    upload('matte', asCanvas(maps.matte))
     for (const name of ['luma', 'scratch', 'fine', 'mid', 'coarse']) target(name, width, height, { float: true })
     target('sketch', width, height, { mipmaps: true })
+    target('pencil', width, height)
     draw(programs.luma, 'luma', { uSource: 'photo' })
     blur('luma', 'fine', 0.9 * scale)
     blur('luma', 'mid', 1.7 * scale)
     blur('luma', 'coarse', 4.5 * scale)
-    drawSketch()
+    draw(programs.sketch, 'sketch', { uFine: 'fine', uMid: 'mid', uCoarse: 'coarse', uMatte: 'matte' }, { uTexel: [1 / width, 1 / height], uDetail: 0.5 })
+    gl.bindTexture(gl.TEXTURE_2D, textures.sketch)
+    gl.generateMipmap(gl.TEXTURE_2D)
+
+    state.lines = maps.line ? 'line' : 'sketch'
+    if (maps.line) upload('line', asCanvas(maps.line))
+    const ratio = GUIDE_SIZE / Math.max(width, height)
+    const small = document.createElement('canvas')
+    small.width = Math.max(1, Math.round(width * ratio))
+    small.height = Math.max(1, Math.round(height * ratio))
+    const context = small.getContext('2d', { willReadFrequently: true })
+    context.drawImage(state.source, 0, 0, small.width, small.height)
+    const guides = buildGuides(context.getImageData(0, 0, small.width, small.height), maps)
+    floatTexture('guideTone', guides.width, guides.height, guides.tone)
+    floatTexture('guideField', guides.width, guides.height, guides.field)
+    floatTexture('guideSide', guides.width, guides.height, guides.side)
+    drawPencil()
     reseed(seed)
   }
 
-  // Cheap enough to rerun on every slider move; the blurred luminance is kept from prepare().
-  function drawSketch() {
+  // One full-screen pass, so it is rerun on every slider move.
+  function drawPencil() {
     const { width, height } = state
-    draw(programs.sketch, 'sketch', { uFine: 'fine', uMid: 'mid', uCoarse: 'coarse', uMatte: 'matte' }, { uTexel: [1 / width, 1 / height], uDetail: state.detail })
-    gl.bindTexture(gl.TEXTURE_2D, textures.sketch)
-    gl.generateMipmap(gl.TEXTURE_2D)
+    draw(programs.hatch, 'pencil', { uLine: state.lines, uMatte: 'matte', uTone: 'guideTone', uField: 'guideField', uSide: 'guideSide' }, {
+      uSize: [width, height],
+      uUnit: Math.max(width, height) / 1400,
+      uHatching: state.hatching,
+      uFocus: state.focus,
+      uSeed: 3.5,
+    })
   }
 
   function reseed(seed) {
@@ -166,10 +215,8 @@ export function createRenderer(canvas) {
       state.levels = [low, Math.max(high, low + 0.25)]
     } else state.levels = [0, 1]
     const fields = buildFields({ width: w, height: h, matte, luma, edge, seed })
-    texture('field')
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, w, h, 0, gl.RGBA, gl.FLOAT, fields.data)
-    texture('field2')
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, w, h, 0, gl.RGBA, gl.FLOAT, fields.second)
+    floatTexture('field', w, h, fields.data)
+    floatTexture('field2', w, h, fields.second)
     state.seed = seed
     state.ready = true
   }
@@ -177,14 +224,13 @@ export function createRenderer(canvas) {
   function render(time) {
     if (!state.width) return
     const t = Math.min(Math.max(time, 0), TIMELINE.duration)
-    draw(programs.composite, null, { uPhoto: 'photo', uSketch: 'sketch', uMatte: 'matte', uField: 'field', uField2: 'field2' }, {
+    draw(programs.composite, null, { uPhoto: 'photo', uSketch: 'sketch', uPencil: 'pencil', uMatte: 'matte', uField: 'field', uField2: 'field2' }, {
       uAspect: [state.width / state.height, 1],
       uSize: [state.width, state.height],
       uPaper: TIMELINE.paper,
       uInk: TIMELINE.ink,
       uAccent: TIMELINE.accent,
       uTint: state.tint,
-      uShading: state.shading,
       uSketchOnly: state.sketchOnly ? 1 : 0,
       uLevels: state.levels,
       uSeed: (state.seed % 97) + 0.5,
@@ -200,11 +246,14 @@ export function createRenderer(canvas) {
     reseed,
     render,
     setTint: value => { state.tint = value },
-    setDetail: value => {
-      state.detail = value
-      if (state.ready) drawSketch()
+    setHatching: value => {
+      state.hatching = value
+      if (state.ready) drawPencil()
     },
-    setShading: value => { state.shading = value },
+    setFocus: value => {
+      state.focus = value
+      if (state.ready) drawPencil()
+    },
     setSketchOnly: value => { state.sketchOnly = value },
     get ready() { return state.ready },
   }

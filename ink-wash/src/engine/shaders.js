@@ -75,16 +75,128 @@ void main() {
   outColor = vec4(texture(uMatte, vUv).r, s.g, s.b, 1.0);
 }`
 
+// Pencil: model contours plus procedural hatching, steered by where the viewer looks.
+// R: all graphite, G: contours alone. Mirrors prototype/sketch_reference.py; the guide
+// textures come from guides.js. Lengths are in pixels at a 1400px long side, times uUnit.
+export const HATCH = `#version 300 es
+precision highp float;
+in vec2 vUv;
+out vec4 outColor;
+uniform sampler2D uLine, uMatte, uTone, uField, uSide;
+uniform vec2 uSize;
+uniform float uUnit, uHatching, uFocus, uSeed;
+
+const float PI = 3.14159265;
+
+float hash(vec3 p) {
+  p = fract(p * vec3(0.1031, 0.1030, 0.0973));
+  p += dot(p, p.yxz + 33.33);
+  return fract((p.x + p.y) * p.z);
+}
+float noise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  float a = hash(vec3(i, uSeed));
+  float b = hash(vec3(i + vec2(1.0, 0.0), uSeed));
+  float c = hash(vec3(i + vec2(0.0, 1.0), uSeed));
+  float d = hash(vec3(i + vec2(1.0, 1.0), uSeed));
+  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
+// One family of parallel hand strokes at a fixed angle. Each level halves the stroke
+// length, so a long stroke breaks cleanly into shorter ones where the level rises.
+float strokes(vec2 px, float angle, float spacing, float len, float seed, float coverage, float level, float focus, float wobble) {
+  float c = cos(angle);
+  float s = sin(angle);
+  float u = px.x * c + px.y * s;
+  float v = -px.x * s + px.y * c + wobble;
+  float row = floor(v / spacing);
+  float segLen = len * (0.55 + 0.9 * hash(vec3(row, seed, 1.0)));
+  float along = (u + hash(vec3(row, seed, 2.0)) * 999.0) / segLen * exp2(level);
+  float seg = floor(along);
+  float w = along - seg;
+  vec3 key = vec3(row, seg + level * 7919.0, seed);
+  float tilt = (hash(key + vec3(0.0, 0.0, 0.17)) - 0.5) * 0.55 * spacing;
+  float offset = (hash(vec3(row, seed, 3.0)) - 0.5) * 0.4 * spacing;
+  float d = abs((v / spacing - row - 0.5) * spacing - offset - (w - 0.5) * tilt);
+  float pressure = (0.5 + 0.15 * focus) + (0.5 - 0.15 * focus) * hash(key + vec3(0.0, 0.0, 0.41));
+  float taper = smoothstep(0.0, 0.1, w) * smoothstep(1.0, 0.82, w);
+  // Nothing may exist at zero coverage, or faint strokes rain over the bare paper.
+  float exists = smoothstep(0.0, 0.08, coverage - hash(key + vec3(0.0, 0.0, 0.73)));
+  float width = (0.78 - 0.16 * focus) * max(uUnit, 0.7);
+  float x = d / width;
+  return exp(-x * x) * pressure * taper * exists;
+}
+
+void main() {
+  vec2 px = vec2(vUv.x, 1.0 - vUv.y) * uSize; // image coordinates, y down, as the guides use
+  float subject = smoothstep(0.3, 0.7, texture(uMatte, vUv).r);
+  vec4 tone = texture(uTone, vUv);
+  vec4 field = texture(uField, vUv);
+  vec4 side = texture(uSide, vUv);
+  float dark = tone.r;
+  float shade = tone.g;
+  float focus = tone.b * uFocus;
+
+  // One-sided contour band: a contour lies just behind this pixel, looking back along the
+  // shading side. Darkest at the line, fading with distance.
+  vec2 back = normalize(side.gb + 1e-6) * vec2(1.0, -1.0) * 32.0 * uUnit / uSize;
+  float band = 0.0;
+  for (int i = 1; i <= 14; i++) {
+    float t = float(i) / 14.0;
+    vec2 at = vUv - back * t;
+    float line = textureLod(uLine, at, 0.8).r * smoothstep(0.3, 0.7, textureLod(uMatte, at, 1.0).r);
+    band = max(band, line * (1.0 - 0.5 * t));
+  }
+  band = smoothstep(0.05, 0.32, band);
+  float nearContour = band * shade;
+
+  // Stroke direction: around the form away from the focus, off the contours inside it.
+  float pull = focus * smoothstep(0.15, 0.6, side.r);
+  vec2 heading = field.rg * (1.0 - pull) + field.ba * pull * 2.0;
+  float theta = 0.5 * atan(heading.y, heading.x);
+
+  vec2 q = px / uUnit;
+  float wobble = (noise(q / 48.0) - 0.5) * 3.0 * uUnit;
+  float patchTurn = (noise(q / 95.0 + 31.0) - 0.5) * 1.6;
+  float cluster = clamp(0.5 + (noise(q / 60.0 + 77.0) - 0.5) * 2.4, 0.0, 1.0);
+  float level = clamp(floor(focus * 3.999 + (noise(q / 20.0 + 13.0) - 0.5) * 0.06), 0.0, 3.0);
+
+  const float TURN[5] = float[5](0.0, 0.0, 0.6632, -0.2443, 1.0821);
+  const float SPACING[5] = float[5](13.0, 9.0, 7.2, 5.4, 4.0);
+  const float LENGTH[5] = float[5](220.0, 190.0, 160.0, 130.0, 110.0);
+  const float LOW[5] = float[5](0.12, 0.3, 0.48, 0.62, 0.78);
+  const float HIGH[5] = float[5](0.42, 0.58, 0.74, 0.88, 1.0);
+
+  // Tone is carried by stroke density alone: five passes switch on one after another.
+  float driver = mix(clamp(dark + 0.14, 0.0, 1.0), nearContour, focus) * 2.0 * uHatching;
+  float paper = 1.0;
+  for (int i = 0; i < 5; i++) {
+    float coverage = clamp((driver - LOW[i]) / (HIGH[i] - LOW[i]), 0.0, 1.0);
+    if (i < 2) coverage *= 0.65 + 0.6 * cluster * (1.0 - focus) + 0.35 * focus;
+    coverage *= subject;
+    float angle = theta + TURN[i] * (1.0 - 0.85 * focus) + patchTurn * 0.35 * (1.0 - focus);
+    float k = mod(floor(angle / (PI / 8.0) + 0.5), 8.0);
+    float layer = strokes(px, k * PI / 8.0, SPACING[i] * uUnit, LENGTH[i] * uUnit, 17.0 * float(i) + k, coverage, level, focus, wobble);
+    paper *= 1.0 - 0.42 * layer;
+  }
+
+  float edge = smoothstep(0.25, 0.6, textureLod(uMatte, vUv, 1.5).r);
+  float contour = pow(clamp(texture(uLine, vUv).r * 1.6, 0.0, 1.0), 0.85) * edge;
+  outColor = vec4(1.0 - (1.0 - 0.9 * contour) * paper, 0.9 * contour, 0.0, 1.0);
+}`
+
 export const COMPOSITE = `#version 300 es
 precision highp float;
 in vec2 vUv;
 out vec4 outColor;
-uniform sampler2D uPhoto, uSketch, uMatte, uField, uField2;
+uniform sampler2D uPhoto, uSketch, uPencil, uMatte, uField, uField2;
 uniform vec2 uAspect;
 uniform vec2 uSize;
 // Each front: x = start (s), y = duration (s), z = easing exponent.
 uniform vec3 uPaper, uInk, uAccent;
-uniform float uTint, uSeed, uStage, uZoom, uTime, uShading, uSketchOnly;
+uniform float uTint, uSeed, uStage, uZoom, uTime, uSketchOnly;
 uniform vec2 uLevels;
 
 float hash(vec2 p) {
@@ -175,20 +287,15 @@ void main() {
   float glow = smoothstep(-0.18, 0.0, paperAge);
   vec3 film = mix(photo, vec3(0.99, 0.95, 0.86), glow * glow * 0.5);
 
-  // --- Pencil: only the subject is drawn at first.
+  // --- Pencil: contours and hatching of the subject, drawn as the paper arrives.
   vec4 sketch = texture(uSketch, uv);
+  vec4 lead = texture(uPencil, uv);
   float matteSharp = texture(uMatte, uv).r;
   float matteSoft = textureLod(uMatte, uv, 3.0).r;
   float subject = smoothstep(0.2, 0.55, mix(matteSharp, matteSoft, 0.5));
   float drawn = smoothstep(0.03, 0.4, paperAge);
-  float graphite = 0.5 + 0.5 * smoothstep(0.25, 0.75, tooth * 0.6 + pores * 0.4);
-  float tone = 1.0 - clamp((sketch.g - uLevels.x) / (uLevels.y - uLevels.x), 0.0, 1.0);
-  float stripes = smoothstep(0.1, 0.9, sin((p.x + p.y * 0.8) * 560.0 + noise(p * 30.0) * 7.0));
-  // Shading lets the hatch reach lighter tones, widens its patches, and darkens it; 0 removes it.
-  float hatchFrom = mix(0.9, 0.34, uShading);
-  float patchFrom = mix(0.6, 0.0, uShading);
-  float hatch = stripes * smoothstep(hatchFrom, hatchFrom + 0.36, tone) * smoothstep(patchFrom, patchFrom + 0.32, noise(p * 7.0 + uSeed)) * 0.48 * uShading;
-  float pencil = max(sketch.r, hatch) * subject * drawn * graphite;
+  float graphite = 0.68 + 0.32 * smoothstep(0.25, 0.75, tooth * 0.6 + pores * 0.4);
+  float pencil = lead.r * subject * drawn * graphite;
 
   // --- Ink: arrives blurred and pale, then settles into the tones of the photograph.
   float feather = fbm(p * 24.0 + uSeed * 4.0) - 0.5;
@@ -242,9 +349,9 @@ void main() {
   vec3 pigment = mix(sepia, clamp(mix(vec3(0.8, 0.72, 0.6), hue, 0.8) * 0.4, 0.02, 0.9), uTint);
   vec3 painted = paper * pow(pigment, vec3(density));
 
-  float inkLine = sketch.r * cover * mix(0.3, 1.0, inkMatte) * (0.4 + 0.6 * settle);
+  float inkLine = max(lead.g, sketch.r * (1.0 - subject)) * cover * mix(0.3, 1.0, inkMatte) * (0.4 + 0.6 * settle);
   painted *= mix(vec3(1.0), vec3(0.2, 0.14, 0.1), inkLine * 0.75);
-  painted *= mix(vec3(1.0), vec3(0.34, 0.29, 0.26), pencil * 0.9 * (1.0 - 0.6 * cover));
+  painted *= mix(vec3(1.0), vec3(0.24, 0.21, 0.19), pencil * (1.0 - 0.6 * cover));
   painted *= mix(vec3(1.0), sepia * 0.5, splatter(p) * 0.9 * (1.0 - uSketchOnly));
 
   vec3 col = mix(film, painted, paperMask);
