@@ -1,0 +1,204 @@
+:root {
+  color-scheme: dark;
+  --bg: #141618;
+  --surface: #202322;
+  --border: #50574f;
+  --text: #f6f6ee;
+  --muted: #a5aaa0;
+  --accent: #cbdebc;
+  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #app { height: 100%; }
+
+body {
+  margin: 0;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+.app {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto auto;
+  gap: 16px;
+  height: 100%;
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 20px 24px 14px;
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 400;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+}
+
+.top p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+button {
+  flex: none;
+  padding: 9px 16px;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 100px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:focus-visible, .scrubber:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button:disabled { opacity: 0.4; cursor: default; }
+button[aria-pressed='true'] { color: var(--bg); background: var(--accent); border-color: var(--accent); }
+button.primary { color: var(--bg); background: var(--text); border-color: var(--text); font-weight: 600; }
+button.primary:hover:not(:disabled) { background: var(--accent); }
+
+button.icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+}
+
+button.icon svg { width: 18px; height: 18px; fill: currentColor; }
+
+.stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 0;
+}
+
+.frame {
+  position: relative;
+  display: flex;
+  max-width: 100%;
+  max-height: 100%;
+  box-shadow: 0 24px 60px rgb(0 0 0 / 0.45);
+}
+
+canvas {
+  display: block;
+  max-width: 100%;
+  max-height: calc(100dvh - 250px);
+  background: #000;
+  cursor: pointer;
+}
+
+.status {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  margin: 0;
+  padding: 8px 16px;
+  font-size: 13px;
+  white-space: nowrap;
+  background: rgb(20 22 24 / 0.82);
+  border: 1px solid var(--border);
+  border-radius: 100px;
+  transform: translateX(-50%);
+  backdrop-filter: blur(6px);
+}
+
+.drop-hint {
+  position: absolute;
+  inset: 0;
+  display: none;
+  place-items: center;
+  margin: 0;
+  font-size: 15px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  background: rgb(20 22 24 / 0.78);
+  border: 1px dashed var(--accent);
+  pointer-events: none;
+}
+
+.dragging .drop-hint { display: grid; }
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sketch-controls {
+  display: flex;
+  gap: 28px;
+}
+
+.sketch-controls label {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.scrubber {
+  flex: 1;
+  min-width: 80px;
+  height: 22px;
+  margin: 0 6px;
+  background: transparent;
+  appearance: none;
+  cursor: pointer;
+}
+
+.scrubber::-webkit-slider-runnable-track {
+  height: 3px;
+  background: linear-gradient(to right, var(--accent) var(--progress), var(--border) var(--progress));
+  border-radius: 3px;
+}
+
+.scrubber::-moz-range-track { height: 3px; background: var(--border); border-radius: 3px; }
+.scrubber::-moz-range-progress { height: 3px; background: var(--accent); border-radius: 3px; }
+
+.scrubber::-webkit-slider-thumb {
+  width: 13px;
+  height: 13px;
+  margin-top: -5px;
+  background: var(--text);
+  border-radius: 50%;
+  appearance: none;
+}
+
+.scrubber::-moz-range-thumb { width: 13px; height: 13px; background: var(--text); border: 0; border-radius: 50%; }
+.scrubber:disabled { opacity: 0.4; cursor: default; }
+
+.note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+@media (max-width: 640px) {
+  .app { padding: 14px 14px 10px; gap: 12px; }
+  .top p { display: none; }
+  .controls { flex-wrap: wrap; justify-content: center; }
+  .scrubber { flex-basis: calc(100% - 70px); }
+  .sketch-controls { flex-direction: column; gap: 4px; }
+  canvas { max-height: calc(100dvh - 330px); }
+}
