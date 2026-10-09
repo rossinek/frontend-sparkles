@@ -70,6 +70,18 @@ const OUTRO = { camera: 0.5, total: 1.5 }
 /** How long everything runs, with the outro if it is on. */
 export const durationFor = (framing, outro = false) => mainDuration(framing) + (outro ? OUTRO.total : 0)
 
+// Rhythmic only: when the planned frame is not turned (or barely), the pushes lean the
+// picture into its sideways travel: 2.5° on the first, easing back to 1° on the second, and
+// the last brings it level. Degrees at time t; positive when the photo ends up to the left,
+// negative to the right, nothing without sideways travel.
+function swingAt(t, framing) {
+  const [first, second, third] = MOTIONS.rhythmic
+  const eased = ([delay, length, , ease]) => ease(Math.min(Math.max((t - PULL.start - delay) / length, 0), 1))
+  const sideways = Math.min(Math.abs(framing.pan[0]) / 0.04, 1) * -Math.sign(framing.pan[0])
+  const level = Math.max(0, 1 - Math.abs(framing.rotation) / 3)
+  return sideways * level * (2.5 * eased(first) - 1.5 * eased(second) - 1 * eased(third))
+}
+
 // How far each part of the camera move has come at time t, 0…1.
 function pullAt(t, motion) {
   const done = { x: 0, y: 0, turn: 0, zoom: 0 }
@@ -378,7 +390,7 @@ export function createRenderer(canvas) {
       // The parts travel out of step, so a point along the way is not automatically one the
       // sheet can cover; it is held to what can be shown, as the planned frame itself is.
       camera = effective({
-        rotation: framing.rotation * done.turn,
+        rotation: framing.rotation * done.turn + (state.motion === 'rhythmic' ? swingAt(t, framing) : 0),
         scale: Math.exp(Math.log(framing.scale) * done.zoom),
         pan: [framing.pan[0] * done.x, framing.pan[1] * done.y],
       }, state.width / state.height, WIDE)
