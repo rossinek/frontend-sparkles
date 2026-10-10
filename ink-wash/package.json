@@ -12,6 +12,7 @@
   "dependencies": {
     "@huggingface/transformers": "^4.3.1",
     "@litertjs/core": "^2.5.3",
+    "fabric": "^7.4.0",
     "vue": "^3.5.43",
     "vue-router": "^5.4.0"
   },

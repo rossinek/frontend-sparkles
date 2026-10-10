@@ -139,7 +139,7 @@ export function createRenderer(canvas) {
   gl.bindVertexArray(vao)
   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1)
 
-  const state = { width: 0, height: 0, source: null, ready: false, tint: 0, seed: 1, levels: [0, 1], hatching: 0.5, focus: 1, lines: 'sketch', sketchOnly: false, planning: false, guides: 0, matteView: false, outro: false, live: false, background: 0.8, finished: false, motion: 'rhythmic', framing: { rotation: 0, scale: 1, pan: [0, 0], still: true } }
+  const state = { width: 0, height: 0, source: null, ready: false, tint: 0, seed: 1, levels: [0, 1], hatching: 0.5, focus: 1, lines: 'sketch', sketchOnly: false, planning: false, guides: 0, matteView: false, outro: false, live: false, text: false, textEdit: false, textLight: false, textStrength: 0.9, background: 0.8, finished: false, motion: 'rhythmic', framing: { rotation: 0, scale: 1, pan: [0, 0], still: true } }
   const textures = {}
   const targets = {}
 
@@ -380,7 +380,7 @@ export function createRenderer(canvas) {
     // The Reach preview shows the plain photo, so the camera stays where it starts.
     // Previews of the finished picture show the end of the painting, before any outro.
     const end = mainDuration(framing)
-    const clock = state.matteView ? 0 : state.planning || state.finished ? end : Math.min(Math.max(time, 0), durationFor(framing, state.outro))
+    const clock = state.matteView ? 0 : state.planning || state.finished || state.textEdit ? end : Math.min(Math.max(time, 0), durationFor(framing, state.outro))
     const t = Math.min(clock, end) // the painting itself stops here
     const after = clock - end      // seconds into the outro
     // The camera goes from the photo filling the viewport to the planned frame. Left where
@@ -410,7 +410,7 @@ export function createRenderer(canvas) {
     const angle = (camera.rotation * Math.PI) / 180
     const cos = Math.cos(angle) / camera.scale
     const sin = Math.sin(angle) / camera.scale
-    draw(programs.composite, null, { uPhoto: 'photo', uSketch: 'sketch', uPencil: 'pencil', uPencilWide: 'pencilWide', uMatte: 'matte', uField: 'field', uField2: 'field2', uSheet: 'sheet', uMatteTry: state.matteView ? 'matteTry' : 'matte', uLive: state.live ? 'live' : 'photo', uGroundSketch: 'groundSketch' }, {
+    draw(programs.composite, null, { uPhoto: 'photo', uSketch: 'sketch', uPencil: 'pencil', uPencilWide: 'pencilWide', uMatte: 'matte', uField: 'field', uField2: 'field2', uSheet: 'sheet', uMatteTry: state.matteView ? 'matteTry' : 'matte', uLive: state.live ? 'live' : 'photo', uText: state.text ? 'text' : 'matte', uGroundSketch: 'groundSketch' }, {
       uBackground: state.background,
       // The last few percent ease into the untouched background, so 100% is exactly as before.
       uGroundOn: 1 - Math.min(Math.max((state.background - 0.96) / 0.039, 0), 1),
@@ -434,6 +434,21 @@ export function createRenderer(canvas) {
       uPull: pull,
       uPullStart: pulledBack ? PULL.start : 1e6, // never, when the frame stays put
       uTime: t,
+      uTextOn: state.text ? 1 : 0,
+      // Lettering is laid out in the final frame: where the camera ends, or the end of the
+      // slow push-in when it stays put.
+      ...(() => {
+        const scale = pulledBack ? framing.scale : 1.035
+        const turn = pulledBack ? (framing.rotation * Math.PI) / 180 : 0
+        return {
+          uTextX: [scale * Math.cos(turn), -scale * Math.sin(turn)],
+          uTextY: [scale * Math.sin(turn), scale * Math.cos(turn)],
+          uTextPan: pulledBack ? framing.pan : [0, 0],
+        }
+      })(),
+      uTextStart: TIMELINE.accent[0] + 0.5, // a beat after the strong ink
+      uTextLight: state.textLight ? 1 : 0,
+      uTextStrength: state.textStrength,
       uOutro: after > 0 ? after : -1,
     })
   }
@@ -456,6 +471,17 @@ export function createRenderer(canvas) {
     /** @param {{ rotation: number, scale: number, pan: [number, number], still: boolean }} framing as returned by effective() */
     setFraming: framing => { state.framing = framing },
     setPlanning: value => { state.planning = value },
+    /** Lettering as a canvas the size of the photo, ink in its alpha; null removes it. */
+    setText: source => {
+      state.text = !!source
+      if (source) upload('text', source)
+    },
+    /** Shows the finished frame, camera arrived, while lettering is edited over it. */
+    setTextEdit: value => { state.textEdit = value },
+    setTextStyle: ({ light, strength }) => {
+      state.textLight = light
+      state.textStrength = strength
+    },
     /** A playing video to show under the paper instead of the still photo; null for the photo. */
     /** Keeps showing the last video frame given to setLive, if there is one. */
     holdLive: () => { state.live = !!textures.live },
@@ -484,6 +510,6 @@ export function createRenderer(canvas) {
     setMotion: value => { state.motion = value },
     get ready() { return state.ready },
     /** True while a setting is being previewed instead of the animation. */
-    get previewing() { return state.planning || state.sketchOnly || state.finished || state.matteView },
+    get previewing() { return state.planning || state.sketchOnly || state.finished || state.matteView || state.textEdit },
   }
 }

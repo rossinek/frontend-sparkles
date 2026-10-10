@@ -11,6 +11,6 @@
     "name": "Ink Wash",
     "description": "A photo dissolves into a pencil sketch on aged paper, then fills with spreading ink.",
     "type": "pnpm",
-    "tags": ["Vue", "WebGL", "Shaders", "Transformers.js", "LiteRT.js"]
+    "tags": ["Vue", "WebGL", "Shaders", "Transformers.js", "LiteRT.js", "Fabric.js"]
   }
 ]

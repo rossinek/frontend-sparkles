@@ -44,6 +44,19 @@ const picking = ref(false)
 const whole = ref(false) // show the whole video, or just a second either side of the effect
 const showVideo = ref(false)
 let videoRunning = false
+// Lettering (PoC): one block of text, edited with Fabric.js on a layer over the picture and
+// handed to the renderer as a texture, so it becomes part of the painting.
+const textLayer = ref(null)
+const editingText = ref(false)
+const hasText = ref(false)
+const textAlign = ref('left')
+const textSize = ref(150)
+const textLine = ref(0.9)
+const textLight = ref(false)
+const textStrength = ref(0.9)
+let fabric = null
+let board = null
+let lettering = null
 let drawn = 0        // when the canvas was last drawn
 
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -103,7 +116,37 @@ watch(playing, value => {
   if (!value) stopVideo()
 })
 
-watch(framing, value => {
+// Where the camera ends up: the planned frame, or the end of the slow push-in when it stays put.
+const finalView = frame => (frame.still ? { scale: 1.035, rotation: 0, pan: [0, 0] } : frame)
+
+// The lettering is laid out in the final frame but belongs to the scene. When the frame is
+// dragged, zoomed, or turned, the text is carried along: its place on the sheet is found
+// through the old frame and put back through the new one.
+function carryText(before, after) {
+  if (!lettering || !board) return
+  const { width, height } = canvas.value
+  const from = finalView(before)
+  const to = finalView(after)
+  const centre = lettering.getCenterPoint()
+  const view = [(centre.x - width / 2) / height - from.pan[0], (height / 2 - centre.y) / height - from.pan[1]]
+  const back = (-from.rotation * Math.PI) / 180
+  const sheet = [(Math.cos(back) * view[0] - Math.sin(back) * view[1]) / from.scale, (Math.sin(back) * view[0] + Math.cos(back) * view[1]) / from.scale]
+  const turn = (to.rotation * Math.PI) / 180
+  const x = to.scale * (Math.cos(turn) * sheet[0] - Math.sin(turn) * sheet[1]) + to.pan[0]
+  const y = to.scale * (Math.sin(turn) * sheet[0] + Math.cos(turn) * sheet[1]) + to.pan[1]
+  const grow = to.scale / from.scale
+  lettering.set({
+    scaleX: lettering.scaleX * grow,
+    scaleY: lettering.scaleY * grow,
+    angle: lettering.angle - (to.rotation - from.rotation), // the frame turns anticlockwise, Fabric clockwise
+  })
+  lettering.setPositionByOrigin(new fabric.Point(x * height + width / 2, height / 2 - y * height), 'center', 'center')
+  lettering.setCoords()
+  board.requestRenderAll()
+}
+
+watch(framing, (value, before) => {
+  if (before) carryText(before, value)
   renderer?.setFraming(value)
   if (time.value > duration.value) time.value = duration.value
 }, { immediate: true })
@@ -144,6 +187,120 @@ function start(maps) {
   status.value = ''
   jump(reducedMotion ? duration.value : 0)
   playing.value = !reducedMotion
+}
+
+const pushText = () => renderer.setText(lettering ? board.lowerCanvasEl : null)
+
+function fitBoard() {
+  if (!board) return
+  board.setDimensions({ width: canvas.value.width, height: canvas.value.height })
+  board.setDimensions({ width: '100%', height: '100%' }, { cssOnly: true })
+  board.calcOffset()
+  board.requestRenderAll()
+}
+
+async function addText() {
+  if (!fabric) {
+    fabric = await import('fabric')
+    await document.fonts.load('120px Cherish')
+  }
+  if (!board) {
+    // One texel per picture pixel, so the shader's softening of the text means the same everywhere.
+    board = new fabric.Canvas(textLayer.value, { selection: false, enableRetinaScaling: false })
+    fitBoard()
+    board.on('after:render', pushText)
+    // The size slider follows the selection: its size while some text is selected.
+    const follow = () => {
+      if (!lettering) return
+      const picked = lettering.isEditing && lettering.selectionStart !== lettering.selectionEnd
+        ? lettering.getSelectionStyles(lettering.selectionStart, lettering.selectionStart + 1)[0]?.fontSize
+        : null
+      textSize.value = picked ?? lettering.fontSize
+    }
+    board.on('text:selection:changed', follow)
+    board.on('text:editing:entered', follow)
+  }
+  const unit = Math.max(canvas.value.width, canvas.value.height) / 1600
+  lettering = new fabric.IText('Directed by\nYour Name', {
+    // Fabric places objects by their centre.
+    left: canvas.value.width * 0.5,
+    top: canvas.value.height * 0.5,
+    fontFamily: 'Cherish',
+    fontSize: 150 * unit,
+    lineHeight: textLine.value,
+    textAlign: textAlign.value,
+    fill: '#000',
+    cornerColor: '#cbdebc',
+    cornerStrokeColor: '#141618',
+    borderColor: '#cbdebc',
+    transparentCorners: false,
+    cornerSize: 11,
+    padding: 8,
+  })
+  lettering.setSelectionStyles({ fontSize: 86 * unit }, 0, 11) // the first line starts smaller
+  lettering.initDimensions()
+  board.add(lettering)
+  board.setActiveObject(lettering)
+  textSize.value = lettering.fontSize
+  hasText.value = true
+  setTextEditing(true)
+}
+
+function setTextEditing(value) {
+  editingText.value = value
+  playing.value = false
+  renderer.setTextEdit(value)
+  if (!value) {
+    lettering?.exitEditing()
+    board?.discardActiveObject()
+  } else if (lettering) board.setActiveObject(lettering)
+  board?.calcOffset()
+  board?.requestRenderAll()
+}
+
+// Size applies to the selected characters while some are selected, otherwise to all of it.
+function setTextSize(event) {
+  textSize.value = Number(event.target.value)
+  if (lettering.isEditing && lettering.selectionStart !== lettering.selectionEnd) lettering.setSelectionStyles({ fontSize: textSize.value })
+  else {
+    lettering.removeStyle('fontSize')
+    lettering.set('fontSize', textSize.value)
+  }
+  lettering.initDimensions()
+  lettering.setCoords()
+  board.requestRenderAll()
+}
+
+function setTextLine(event) {
+  textLine.value = Number(event.target.value)
+  lettering.set('lineHeight', textLine.value)
+  lettering.initDimensions()
+  lettering.setCoords()
+  board.requestRenderAll()
+}
+
+function setTextAlign(value) {
+  textAlign.value = value
+  lettering.set('textAlign', value)
+  board.requestRenderAll()
+}
+
+function setTextTone(light) {
+  textLight.value = light
+  renderer.setTextStyle({ light, strength: textStrength.value })
+}
+
+function setTextStrength(event) {
+  textStrength.value = Number(event.target.value)
+  renderer.setTextStyle({ light: textLight.value, strength: textStrength.value })
+}
+
+function removeText() {
+  board.remove(lettering)
+  lettering = null
+  hasText.value = false
+  setTextEditing(false)
+  pushText()
 }
 
 function stopVideo() {
@@ -247,6 +404,7 @@ function paint(bitmap, sample = null) {
   canvas.value.width = work.width
   canvas.value.height = work.height
   renderer.setImage(work)
+  fitBoard()
   const small = scaled(bitmap, 1024)
   bitmap.close()
   const pixels = small.getContext('2d').getImageData(0, 0, small.width, small.height).data
@@ -530,7 +688,7 @@ function drop(event) {
 }
 
 function onKey(event) {
-  if (event.code !== 'Space' || picking.value || event.target.closest('button, input')) return
+  if (event.code !== 'Space' || picking.value || editingText.value || event.target.closest('button, input, textarea')) return
   event.preventDefault()
   toggle()
 }
@@ -562,6 +720,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  board?.dispose()
   dropClip()
   cancelAnimationFrame(frame)
   clearTimeout(lingering)
@@ -598,6 +757,7 @@ onBeforeUnmount(() => {
               @pointerup="release"
               @pointercancel="release"
             ></canvas>
+            <div class="text-layer" :class="{ editing: editingText }"><canvas ref="textLayer"></canvas></div>
             <video ref="video" class="clip" :class="{ under: !showVideo }" muted playsinline preload="auto"></video>
             <p v-if="status" class="status" role="status">{{ status }}</p>
           </div>
@@ -708,6 +868,44 @@ onBeforeUnmount(() => {
               @blur="endSketchPreview"
             >
           </label>
+        </PanelSection>
+
+        <PanelSection title="Text">
+          <div class="panel-actions">
+            <button v-if="!hasText" type="button" :disabled="!ready" @click="addText">Add text</button>
+            <template v-else>
+              <button type="button" :aria-pressed="editingText" @click="setTextEditing(!editingText)">{{ editingText ? 'Done' : 'Edit text' }}</button>
+              <button type="button" @click="removeText">Remove</button>
+            </template>
+          </div>
+          <template v-if="hasText">
+            <p class="section-note">Shown in the final frame. Double-click the text to type; drag it, or use its handles to scale and turn it. Select part of it to size that part alone.</p>
+            <div class="field inline">
+              <span>Colour</span>
+              <div class="segmented" role="group" aria-label="Text colour">
+                <button type="button" :aria-pressed="!textLight" @click="setTextTone(false)">Dark</button>
+                <button type="button" :aria-pressed="textLight" @click="setTextTone(true)">Light</button>
+              </div>
+            </div>
+            <label class="field">
+              <span class="field-head"><span>Intensity</span><output>{{ Math.round(textStrength * 100) }}%</output></span>
+              <input class="scrubber" type="range" min="0" max="1" step="0.01" :value="textStrength" :style="{ '--progress': `${textStrength * 100}%` }" @input="setTextStrength">
+            </label>
+            <div class="field inline">
+              <span>Align</span>
+              <div class="segmented" role="group" aria-label="Alignment">
+                <button v-for="side in ['left', 'center', 'right']" :key="side" type="button" :aria-pressed="textAlign === side" @click="setTextAlign(side)">{{ side[0].toUpperCase() + side.slice(1) }}</button>
+              </div>
+            </div>
+            <label class="field">
+              <span class="field-head"><span>Size</span><output>{{ Math.round(textSize) }}</output></span>
+              <input class="scrubber" type="range" min="30" max="420" step="1" :value="textSize" :style="{ '--progress': `${((textSize - 30) / 390) * 100}%` }" @input="setTextSize">
+            </label>
+            <label class="field">
+              <span class="field-head"><span>Line height</span><output>{{ textLine.toFixed(2) }}</output></span>
+              <input class="scrubber" type="range" min="0.5" max="1.8" step="0.01" :value="textLine" :style="{ '--progress': `${((textLine - 0.5) / 1.3) * 100}%` }" @input="setTextLine">
+            </label>
+          </template>
         </PanelSection>
 
         <PanelSection title="Motion">

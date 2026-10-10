@@ -33,6 +33,7 @@ pnpm preview
 - **Hatching** sets how much pencil hatching there is; at zero only the contours remain.
 - **Rotate**, **Scale**, and dragging the picture plan the final frame: where the photo ends up once the camera has moved. Scale runs from 0.6×, where the photo sits small on a wide sheet of paper, to 2×. While you plan, the finished frame is shown with the photo's outline and thirds drawn over it, and it stays up for a moment after you let go. **Reset frame** puts the camera back.
 - **Style** picks how the camera gets there: *Rhythmic* (three quick pushes, sideways first, then down and round), *Smooth* (one slow glide), or *Rapid* (one fast push). All three keep drifting slowly until the last moment.
+- **Text** adds one block of lettering in the Cherish script. It is edited on the picture itself, shown in the final frame: double-click to type (Enter breaks the line), drag it anywhere including the margin, and use its handles to scale and turn it. The panel sets alignment, line height, dark or light ink with an intensity, and size, which applies to the selected characters when some are selected. The lettering arrives half a second after the strong ink, eroded at first, and fills out in about 1.2 s.
 - **Outro**, when on, adds an ending: the camera snaps back to the photo's own frame while the photo spreads back over the painting from the middle, and as the camera lands long blots creep in from the edges. The photo comes back muted and sepia and regains its colour as it goes. It takes about a second and a half.
 - **Focus** sets how much the viewer's attention changes the hatching. At zero the whole subject is hatched from tone alone; at full strength the places people look at get short strokes on one side of each contour and stay otherwise clean. While either slider is dragged, the bare drawing is shown so the change is easy to judge.
 
@@ -56,6 +57,8 @@ The two screens are hash routes (`src/main.js`): `#/` is the start screen and `#
 
 A video is played by a plain `<video>` element laid over the canvas; no decoding library is involved. The keyframe is grabbed from it with `createImageBitmap` and then treated exactly like a photo. During the video parts of the timeline the clock follows the video's own time, so the two cannot drift.
 
+The lettering is edited with [Fabric.js](https://fabricjs.com/), loaded on first use, on a layer over the canvas. Fabric's own drawing of the text is kept invisible: its canvas is handed to the shader as a texture, so what you edit is the painted result, and only the handles and caret come from Fabric. The texture is laid out in the final frame and mapped back onto the sheet, which is why the text travels with the camera.
+
 Timing lives in `TIMELINE` in `src/engine/renderer.js`; the look of the paper and ink is in the `COMPOSITE` shader.
 
 ## Credits and Licences
@@ -64,4 +67,5 @@ Timing lives in `TIMELINE` in `src/engine/renderer.js`; the look of the paper an
 - The social preview shows "Helsinki woman in hat" by Toni Hukkanen, [CC0 via Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Helsinki_woman_in_hat_(Unsplash).jpg).
 - RMBG-1.4 by BRIA AI is released for non-commercial use only.
 - Informative Drawings (MIT; ONNX conversion by x-Liola-x), Depth Anything V2 small (Apache-2.0), and UniSal (Apache-2.0; LiteRT conversion by litert-community).
+- Cherish by The Cherish Project Authors, SIL Open Font License; served from `public/fonts` with its licence.
 - All model weights are downloaded from Hugging Face at runtime and are not part of this repository: about 160 MB with WebGPU, about 95 MB without. The LiteRT.js runtime is loaded from jsDelivr.

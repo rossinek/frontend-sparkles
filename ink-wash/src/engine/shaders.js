@@ -282,6 +282,9 @@ uniform sampler2D uGroundSketch; // the simplified background: R its lines, G it
 uniform float uBackground;       // 1 keeps the background's detail; lower simplifies it before painting
 uniform float uGroundOn;         // 0 at full detail, where the untouched background is used
 uniform float uGroundLod;        // how coarse the simplification is, in mip levels
+uniform sampler2D uText;     // lettering, laid out in the final frame; its alpha is the ink
+uniform float uTextOn, uTextStart, uTextLight, uTextStrength;
+uniform vec2 uTextX, uTextY, uTextPan; // takes a point on the sheet to where it sits in the final frame
 uniform sampler2D uLive;     // what lies under the paper: the photo, or a video still playing
 uniform sampler2D uMatteTry; // the subject being tried out with Reach
 uniform float uMatteView;    // 1 while it is shown
@@ -558,6 +561,26 @@ void main() {
   vec3 graphiteTint = mix(vec3(0.24, 0.21, 0.19), mix(vec3(0.1, 0.085, 0.075), vec3(0.02, 0.016, 0.013), deepWash), cover);
   painted *= mix(vec3(1.0), graphiteTint, min(pencil * mix(1.0, mix(1.0, 1.9, deepWash), cover), 1.0));
   painted *= mix(vec3(1.0), sepia * 0.5, splatter(p) * 0.9 * (1.0 - uSketchOnly));
+  // Lettering: written in ink on the paper. It belongs to the picture, so it takes the
+  // paper's tooth, arrives with the paper, and moves with the camera.
+  // It is laid out in the final frame, wherever the camera ends up, so it can sit on the
+  // margin as well as on the photo. It arrives with the strong ink: at first only the
+  // heaviest parts of the strokes, bitten into by noise, which then spread to the full
+  // letters in about 0.7 s.
+  if (uTextOn > 0.5) {
+    vec2 q = (uv - 0.5) * uAspect;
+    vec2 at = (vec2(dot(uTextX, q), dot(uTextY, q)) + uTextPan) / uAspect + 0.5;
+    if (at.x > 0.0 && at.x < 1.0 && at.y > 0.0 && at.y < 1.0) {
+      float lettering = texture(uText, at).a;
+      float core = textureLod(uText, at, 2.6).a;
+      float grown = clamp((uTime - uTextStart) / 1.2, 0.0, 1.0);
+      float bite = fbm(p * 90.0 + uSeed * 2.0) - 0.5;
+      float reach = mix(0.78, -0.3, grown * grown * (3.0 - 2.0 * grown));
+      float written = lettering * smoothstep(reach, reach + 0.16, core + bite * 0.4) * step(uTextStart, uTime);
+      written *= uTextStrength * (0.84 + 0.16 * tooth);
+      painted = mix(painted * mix(vec3(1.0), vec3(0.09, 0.065, 0.05), written), mix(painted, vec3(0.97, 0.93, 0.83), written), uTextLight);
+    }
+  }
 
   vec3 col = mix(film, painted, paperMask);
   col += (hash(uv * uSize + uTime) - 0.5) * 0.012;
