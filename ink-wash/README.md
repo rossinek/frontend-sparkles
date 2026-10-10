@@ -23,7 +23,8 @@ pnpm preview
 ## Controls
 
 - The **start screen** picks the photo: drop or choose your own, or try one of the samples. The title in the editor leads back to it.
-- **Replace photo** or drag and drop an image onto the editor to swap it.
+- **Replace photo** or drag and drop an image or video onto the editor to swap it.
+- With a **video**, the effect still runs on a single frame. A dialog asks for that keyframe as soon as the video is loaded, and **Change keyframe** reopens it. The video plays up to the keyframe, stops for the effect, and carries on. The effect starts early enough that its first blots spend 0.4 s opening over a picture that is still moving. With Outro on, the video likewise starts again as the outro begins, so what spreads back over the painting is already in motion. **Whole video** and **Effect only** switch the preview between the full clip and one second either side of the effect; on the timeline the effect is the taller band.
 - **Play / pause** with the button, a click on the picture, or the space bar. The scrubber seeks anywhere in the animation.
 - **New pour** keeps the photo but picks new starting points and paper.
 - **Colour** tints the ink with the photo's own hues instead of plain sepia.
@@ -52,6 +53,8 @@ Everything is solved on a sheet 1.67 times the size of the photo, so the camera 
 `src/engine/framing.js` holds the planned frame to one rule: the sheet, scaled, turned and moved with the photo, must cover the whole viewport. That is why turning the photo raises the smallest scale, and why it cannot be moved at all at 0.6×. The scale and position you asked for are remembered, so they come back when there is room again. The camera leaves once the paper has covered the photo; `MOTIONS` in `src/engine/renderer.js` describes each way of getting there as a short list of pushes.
 
 The two screens are hash routes (`src/main.js`): `#/` is the start screen and `#/edit/<sample>` the editor, so both open directly on static hosting. An uploaded file cannot survive a reload, so `#/edit` without one returns to the start. The after picture in `public/example` is a frame saved from the editor.
+
+A video is played by a plain `<video>` element laid over the canvas; no decoding library is involved. The keyframe is grabbed from it with `createImageBitmap` and then treated exactly like a photo. During the video parts of the timeline the clock follows the video's own time, so the two cannot drift.
 
 Timing lives in `TIMELINE` in `src/engine/renderer.js`; the look of the paper and ink is in the `COMPOSITE` shader.
 

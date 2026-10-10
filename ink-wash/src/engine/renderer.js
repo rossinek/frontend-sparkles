@@ -67,6 +67,9 @@ const mainDuration = framing => (framing.still ? TIMELINE.duration : PULL.total)
 // in the COMPOSITE shader.
 const OUTRO = { camera: 0.5, total: 1.5 }
 
+/** How long the outro lasts, in seconds. */
+export const OUTRO_LENGTH = OUTRO.total
+
 /** How long everything runs, with the outro if it is on. */
 export const durationFor = (framing, outro = false) => mainDuration(framing) + (outro ? OUTRO.total : 0)
 
@@ -136,7 +139,7 @@ export function createRenderer(canvas) {
   gl.bindVertexArray(vao)
   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1)
 
-  const state = { width: 0, height: 0, source: null, ready: false, tint: 0, seed: 1, levels: [0, 1], hatching: 0.5, focus: 1, lines: 'sketch', sketchOnly: false, planning: false, guides: 0, matteView: false, outro: false, background: 0.8, finished: false, motion: 'rhythmic', framing: { rotation: 0, scale: 1, pan: [0, 0], still: true } }
+  const state = { width: 0, height: 0, source: null, ready: false, tint: 0, seed: 1, levels: [0, 1], hatching: 0.5, focus: 1, lines: 'sketch', sketchOnly: false, planning: false, guides: 0, matteView: false, outro: false, live: false, background: 0.8, finished: false, motion: 'rhythmic', framing: { rotation: 0, scale: 1, pan: [0, 0], still: true } }
   const textures = {}
   const targets = {}
 
@@ -407,7 +410,7 @@ export function createRenderer(canvas) {
     const angle = (camera.rotation * Math.PI) / 180
     const cos = Math.cos(angle) / camera.scale
     const sin = Math.sin(angle) / camera.scale
-    draw(programs.composite, null, { uPhoto: 'photo', uSketch: 'sketch', uPencil: 'pencil', uPencilWide: 'pencilWide', uMatte: 'matte', uField: 'field', uField2: 'field2', uSheet: 'sheet', uMatteTry: state.matteView ? 'matteTry' : 'matte', uGroundSketch: 'groundSketch' }, {
+    draw(programs.composite, null, { uPhoto: 'photo', uSketch: 'sketch', uPencil: 'pencil', uPencilWide: 'pencilWide', uMatte: 'matte', uField: 'field', uField2: 'field2', uSheet: 'sheet', uMatteTry: state.matteView ? 'matteTry' : 'matte', uLive: state.live ? 'live' : 'photo', uGroundSketch: 'groundSketch' }, {
       uBackground: state.background,
       // The last few percent ease into the untouched background, so 100% is exactly as before.
       uGroundOn: 1 - Math.min(Math.max((state.background - 0.96) / 0.039, 0), 1),
@@ -453,6 +456,17 @@ export function createRenderer(canvas) {
     /** @param {{ rotation: number, scale: number, pan: [number, number], still: boolean }} framing as returned by effective() */
     setFraming: framing => { state.framing = framing },
     setPlanning: value => { state.planning = value },
+    /** A playing video to show under the paper instead of the still photo; null for the photo. */
+    /** Keeps showing the last video frame given to setLive, if there is one. */
+    holdLive: () => { state.live = !!textures.live },
+    setLive: source => {
+      state.live = !!source
+      if (!source) return
+      texture('live')
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true)
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source)
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false)
+    },
     setOutro: value => { state.outro = value },
     /** 1 keeps the background's detail in the wash; lower values blur it away. */
     setBackground: value => {
@@ -469,5 +483,7 @@ export function createRenderer(canvas) {
     /** @param {keyof typeof MOTIONS} value */
     setMotion: value => { state.motion = value },
     get ready() { return state.ready },
+    /** True while a setting is being previewed instead of the animation. */
+    get previewing() { return state.planning || state.sketchOnly || state.finished || state.matteView },
   }
 }

@@ -10,8 +10,8 @@ const problem = ref('')
 
 function use(file) {
   if (!file) return
-  if (!file.type.startsWith('image/')) {
-    problem.value = 'That file is not an image.'
+  if (!/^(image|video)\//.test(file.type)) {
+    problem.value = 'That file is not a photo or a video.'
     return
   }
   chosenFile.value = file
@@ -56,10 +56,10 @@ function drop(event) {
     <section class="start-source">
       <button class="dropzone" :class="{ over }" type="button" @click="fileInput.click()">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" /></svg>
-        <strong>Drop a photo here</strong>
+        <strong>Drop a photo or video here</strong>
         <span>or click to choose one</span>
       </button>
-      <input ref="fileInput" type="file" accept="image/*" hidden @change="pick">
+      <input ref="fileInput" type="file" accept="image/*,video/*" hidden @change="pick">
       <p v-if="problem" class="problem" role="alert">{{ problem }}</p>
 
       <h2>Try one of these</h2>

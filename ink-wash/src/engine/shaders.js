@@ -282,6 +282,7 @@ uniform sampler2D uGroundSketch; // the simplified background: R its lines, G it
 uniform float uBackground;       // 1 keeps the background's detail; lower simplifies it before painting
 uniform float uGroundOn;         // 0 at full detail, where the untouched background is used
 uniform float uGroundLod;        // how coarse the simplification is, in mip levels
+uniform sampler2D uLive;     // what lies under the paper: the photo, or a video still playing
 uniform sampler2D uMatteTry; // the subject being tried out with Reach
 uniform float uMatteView;    // 1 while it is shown
 // uPull runs 0…1 as the camera moves to the planned frame; uPullStart is when it begins (s).
@@ -451,7 +452,7 @@ void main() {
   vec3 freshPaper = vec3(0.99, 0.955, 0.875) * (1.0 - 0.2 * field.a) * (0.97 + 0.03 * tooth);
   vec3 paper = mix(agedPaper(p, vUv, tooth), freshPaper, fresh * 0.92);
   float glow = smoothstep(-0.18, 0.0, paperAge);
-  vec3 film = mix(photo, vec3(0.99, 0.95, 0.86), glow * glow * 0.5);
+  vec3 film = mix(texture(uLive, uv).rgb, vec3(0.99, 0.95, 0.86), glow * glow * 0.5);
 
   // --- Pencil: contours and hatching of the subject, drawn as the paper arrives.
   vec4 sketch = texture(uSketch, uv);
@@ -516,20 +517,24 @@ void main() {
   // dark, and breaks into wisps as it goes.
   // How far it runs varies along the edge: in places it gives out before the old edge, in
   // others it runs well past, so the photo's rectangle does not survive as a shape.
-  float along = fbm(p * 1.7 + uSeed * 11.0);
-  float further = fbm(p * 2.3 + uSeed * 13.0 + 40.0);
-  // Pale, watery ink runs far; dark ink is heavy with pigment and settles early, but its
-  // water carries a faint tint on with the rest.
-  float spread = 0.55 + 0.9 * further;
-  float heavy = clamp(density / 1.1, 0.0, 1.0);
-  float reach = mix(0.26, 0.045, heavy) * spread;
-  float begin = mix(-0.13, 0.04, smoothstep(0.3, 0.7, along)) - 0.05 * heavy;
-  float wisp = fbm(p * 5.0 + uSeed * 9.0);
-  float wander = rimDistance + (wisp - 0.5) * 0.14;
-  float thinning = smoothstep(begin, begin + reach, wander) * mix(edging, 1.0, smoothstep(-0.02, 0.02, rimDistance));
-  float tint = min(density, 0.17) * thinning * (1.0 - smoothstep(begin, begin + 0.3 * spread, wander)) * (0.45 + 0.7 * wisp);
-  density = density * (1.0 - thinning) * mix(1.0, 0.5 + wisp, thinning) + tint;
-  density += blots(p) * smoothstep(-0.02, 0.08, rimDistance) * (0.6 + 0.8 * wisp);
+  // None of this touches a pixel inside the photo unless the camera is leaving it, so it is
+  // skipped there: it is a third of the noise this shader computes.
+  if (edging > 0.0 || rimDistance > -0.02) {
+    float along = fbm(p * 1.7 + uSeed * 11.0);
+    float further = fbm(p * 2.3 + uSeed * 13.0 + 40.0);
+    // Pale, watery ink runs far; dark ink is heavy with pigment and settles early, but its
+    // water carries a faint tint on with the rest.
+    float spread = 0.55 + 0.9 * further;
+    float heavy = clamp(density / 1.1, 0.0, 1.0);
+    float reach = mix(0.26, 0.045, heavy) * spread;
+    float begin = mix(-0.13, 0.04, smoothstep(0.3, 0.7, along)) - 0.05 * heavy;
+    float wisp = fbm(p * 5.0 + uSeed * 9.0);
+    float wander = rimDistance + (wisp - 0.5) * 0.14;
+    float thinning = smoothstep(begin, begin + reach, wander) * mix(edging, 1.0, smoothstep(-0.02, 0.02, rimDistance));
+    float tint = min(density, 0.17) * thinning * (1.0 - smoothstep(begin, begin + 0.3 * spread, wander)) * (0.45 + 0.7 * wisp);
+    density = density * (1.0 - thinning) * mix(1.0, 0.5 + wisp, thinning) + tint;
+    density += blots(p) * smoothstep(-0.02, 0.08, rimDistance) * (0.6 + 0.8 * wisp);
+  }
   density *= 1.0 + 0.16 * exp(-max(inkAge, 0.0) / 1.4);
   density *= cover;
   // Water runs ahead of the pigment and leaves a faint stain before the front arrives.
@@ -589,9 +594,11 @@ void main() {
     col = mix(col, vec3(0.99, 0.95, 0.86), wet * wet * 0.28); // the front runs ahead as clear water
     // Just uncovered, the photo is muted and tinted sepia, close to the painting it replaces;
     // each spot takes its colour back over the next half second.
-    float grey = dot(photo, vec3(0.299, 0.587, 0.114));
-    vec3 muted = mix(grey * vec3(1.06, 0.9, 0.7), photo, 0.25); // sepia, like the ink
-    col = mix(col, mix(muted, photo, smoothstep(0.0, 0.5, since)), shown);
+    // With a video, what comes back is the video, already playing again.
+    vec3 back = texture(uLive, uv).rgb;
+    float grey = dot(back, vec3(0.299, 0.587, 0.114));
+    vec3 muted = mix(grey * vec3(1.06, 0.9, 0.7), back, 0.25); // sepia, like the ink
+    col = mix(col, mix(muted, back, smoothstep(0.0, 0.5, since)), shown);
   }
   // Planning guides: the photo's own outline and four hairlines that cut it into thirds.
   // They belong to the photo, so they turn and move with it and show how it sits in the frame.

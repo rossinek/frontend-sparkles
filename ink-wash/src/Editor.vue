@@ -1,11 +1,12 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { createRenderer, durationFor, WIDE, WORK_SIZE } from './engine/renderer.js'
+import { createRenderer, durationFor, OUTRO_LENGTH, WIDE, WORK_SIZE } from './engine/renderer.js'
 import { effective, MAX_ROTATION, MAX_SCALE } from './engine/framing.js'
 import { attention } from './engine/attention.js'
 import { growMatte } from './engine/reach.js'
 import PanelSection from './components/PanelSection.vue'
+import KeyframePicker from './components/KeyframePicker.vue'
 import { asset, chosenFile, SAMPLES } from './source.js'
 
 const route = useRoute()
@@ -35,6 +36,15 @@ const motion = ref('rhythmic')
 const outro = ref(false)
 const credit = ref(null) // the sample being shown, if it is one
 const unsupported = ref(false)
+// A video source: the effect still runs on one frame of it, the keyframe, which the user
+// picks. `key` is null until they have.
+const video = ref(null)
+const clip = ref(null) // { url, duration, key }
+const picking = ref(false)
+const whole = ref(true) // show the whole video, or just a second either side of the effect
+const showVideo = ref(false)
+let videoRunning = false
+let drawn = 0        // when the canvas was last drawn
 
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
 let renderer
@@ -50,8 +60,31 @@ let grab = null
 let lingering = 0
 
 const framing = computed(() => effective({ rotation: rotation.value, scale: scaleWanted.value, pan: panWanted.value }, aspect.value, WIDE))
-const duration = computed(() => durationFor(framing.value, outro.value))
+const effectDuration = computed(() => durationFor(framing.value, outro.value))
+// With a video, the clock runs through three parts: the video up to the keyframe, the
+// effect on that frame, and the video from the keyframe on.
+const hasKey = computed(() => clip.value?.key != null)
+const lead = computed(() => (!hasKey.value ? 0 : whole.value ? clip.value.key : Math.min(1, clip.value.key)))
+const trail = computed(() => {
+  if (!hasKey.value) return 0
+  const rest = clip.value.duration - clip.value.key
+  return whole.value ? rest : Math.min(1, rest)
+})
+// The effect starts a little before the keyframe, while the video is still playing: the
+// first blots open over a moving picture, and it has stopped by the time they have spread.
+// The paper's first dot appears 0.3 s into the effect, so this leaves 0.4 s of blots in motion.
+const OVERLAP = 0.7
+const effectStart = computed(() => lead.value - Math.min(OVERLAP, lead.value))
+// With the outro on, the same happens at the other end: the video starts again as the outro
+// begins, so the picture that spreads back over the painting is already moving.
+const tailOverlap = computed(() => (hasKey.value && outro.value ? Math.min(OUTRO_LENGTH, trail.value) : 0))
+const resume = computed(() => effectStart.value + effectDuration.value - tailOverlap.value) // the video plays on from here
+const duration = computed(() => resume.value + trail.value)
 const progress = computed(() => `${(time.value / duration.value) * 100}%`)
+const effectBand = computed(() => ({
+  '--fx-from': `${(effectStart.value / duration.value) * 100}%`,
+  '--fx-to': `${((effectStart.value + effectDuration.value) / duration.value) * 100}%`,
+}))
 // The scale slider works in octaves, so each step feels the same size.
 const scaleRange = computed(() => {
   const min = Math.log2(framing.value.minScale)
@@ -64,6 +97,10 @@ const framed = computed(() => !framing.value.still)
 // Turning the outro off, or resetting the frame, can leave the clock past the new end.
 watch(duration, value => {
   if (time.value > value) time.value = value
+})
+
+watch(playing, value => {
+  if (!value) stopVideo()
 })
 
 watch(framing, value => {
@@ -105,16 +142,31 @@ function start(maps) {
   renderer.prepare(reached(), seed)
   ready.value = true
   status.value = ''
-  time.value = reducedMotion ? duration.value : 0
+  jump(reducedMotion ? duration.value : 0)
   playing.value = !reducedMotion
 }
 
+function stopVideo() {
+  video.value?.pause()
+  videoRunning = false
+}
+
+function dropClip() {
+  stopVideo()
+  if (!clip.value) return
+  URL.revokeObjectURL(clip.value.url)
+  clip.value = null
+  video.value.removeAttribute('src')
+  video.value.load()
+}
+
 async function load(source, sample = null) {
+  if (source.type?.startsWith('video/')) return loadVideo(source)
+  dropClip()
   const id = ++job
   ready.value = false
   playing.value = false
   time.value = 0
-  credit.value = sample
   status.value = 'Loading photo…'
   let bitmap
   try {
@@ -123,7 +175,73 @@ async function load(source, sample = null) {
     status.value = 'That file could not be read as an image.'
     return
   }
+  if (id === job) paint(bitmap, sample)
+}
+
+// A video is only opened here; nothing is painted until a keyframe has been chosen.
+async function loadVideo(file) {
+  dropClip()
+  const id = ++job
+  ready.value = false
+  playing.value = false
+  time.value = 0
+  credit.value = null
+  status.value = 'Loading video…'
+  const url = URL.createObjectURL(file)
+  const player = video.value
+  try {
+    await new Promise((resolve, reject) => {
+      player.onloadedmetadata = resolve
+      player.onerror = reject
+      player.src = url
+    })
+  } catch {
+    URL.revokeObjectURL(url)
+    status.value = 'That video could not be played in this browser.'
+    return
+  }
+  if (id !== job) return URL.revokeObjectURL(url)
+  clip.value = { url, duration: player.duration, key: null }
+  status.value = 'Choose a frame to paint.'
+  picking.value = true
+}
+
+// Moves the video to a moment and waits until that frame is really there.
+async function seekTo(player, seconds) {
+  if (player.readyState < 2) await new Promise(resolve => player.addEventListener('loadeddata', resolve, { once: true }))
+  if (Math.abs(player.currentTime - seconds) < 0.001) return
+  await new Promise(resolve => {
+    player.addEventListener('seeked', resolve, { once: true })
+    player.currentTime = seconds
+  })
+}
+
+async function useKeyframe(seconds) {
+  picking.value = false
+  stopVideo()
+  ready.value = false
+  playing.value = false
+  status.value = 'Reading the frame…'
+  const id = ++job
+  await seekTo(video.value, seconds)
+  const bitmap = await createImageBitmap(video.value)
   if (id !== job) return
+  clip.value = { ...clip.value, key: seconds }
+  paint(bitmap)
+}
+
+function changeKeyframe() {
+  playing.value = false
+  picking.value = true
+}
+
+// Everything from a decoded picture on: the photo, or the video's keyframe.
+function paint(bitmap, sample = null) {
+  const id = ++job
+  ready.value = false
+  playing.value = false
+  time.value = 0
+  credit.value = sample
   const work = scaled(bitmap, WORK_SIZE)
   aspect.value = work.width / work.height
   canvas.value.width = work.width
@@ -157,27 +275,108 @@ async function onWorkerMessage({ data }) {
   }
 }
 
+// Moves the clock on. Through the video parts the video plays by itself and the clock
+// follows it, so the two cannot drift; through the effect the clock runs alone.
+function advance(delta) {
+  if (!hasKey.value) {
+    time.value = Math.min(time.value + delta, duration.value)
+    if (time.value >= duration.value) playing.value = false
+    return
+  }
+  const player = video.value
+  const { key } = clip.value
+  const reachKey = lead.value // the video runs until here, into the start of the effect
+  const effectEnd = resume.value // where the clock hands back to the video
+  if (time.value < reachKey) {
+    const from = key - reachKey
+    if (!videoRunning) {
+      player.currentTime = from + time.value
+      player.play().catch(() => {})
+      videoRunning = true
+    } else time.value = Math.min(Math.max(player.currentTime - from, 0), reachKey)
+    if (player.currentTime >= key || player.ended) {
+      stopVideo()
+      time.value = reachKey
+    }
+  } else if (time.value < effectEnd) {
+    if (videoRunning) stopVideo()
+    time.value = Math.min(time.value + delta, effectEnd)
+    if (time.value >= effectEnd && trail.value < 0.02) playing.value = false
+  } else if (trail.value < 0.02) {
+    playing.value = false
+  } else {
+    if (!videoRunning) {
+      player.currentTime = key + (time.value - effectEnd)
+      player.play().catch(() => {})
+      videoRunning = true
+    } else time.value = Math.min(effectEnd + Math.max(player.currentTime - key, 0), duration.value)
+    if (player.ended || time.value >= duration.value - 0.001) {
+      stopVideo()
+      time.value = duration.value
+      playing.value = false
+    }
+  }
+}
+
 function tick(now) {
   frame = requestAnimationFrame(tick)
   const delta = Math.min((now - last) / 1000, 0.1)
   last = now
-  if (playing.value) {
-    time.value = Math.min(time.value + delta, duration.value)
-    if (time.value >= duration.value) playing.value = false
-  }
-  renderer.render(time.value)
+  if (playing.value) advance(delta)
+  const effectTime = time.value - effectStart.value
+  // While the effect overlaps the video, the moving picture is what the paper covers.
+  // While the video is busy seeking it has no frame to give; the last one stays up, rather
+  // than falling back to the keyframe and flickering between the two.
+  const overlapping = hasKey.value && effectTime >= 0 && (time.value < lead.value || (tailOverlap.value > 0 && time.value >= resume.value))
+  // On fast displays the canvas is still drawn at most 60 times a second: the picture is
+  // heavy to paint, and an even 60 looks better than a 120 that keeps dropping frames.
+  if (now - drawn < 15) return
+  drawn = now
+  if (!overlapping) renderer.setLive(null)
+  else if (video.value.readyState >= 2 && !video.value.seeking) renderer.setLive(video.value)
+  else renderer.holdLive()
+  renderer.render(Math.min(Math.max(effectTime, 0), effectDuration.value))
+  // The video lies over the canvas outside the effect, unless a setting is being previewed.
+  const outside = hasKey.value && (effectTime < 0 || (effectTime >= effectDuration.value && trail.value >= 0.02 && time.value > resume.value))
+  const shown = outside && !renderer.previewing
+  if (shown !== showVideo.value) showVideo.value = shown
+}
+
+// While paused, the video sits on the frame the clock points at.
+function park() {
+  if (!hasKey.value || playing.value) return
+  const effectTime = time.value - effectStart.value
+  if (time.value < lead.value) video.value.currentTime = clip.value.key - (lead.value - time.value)
+  else if (time.value >= resume.value) video.value.currentTime = clip.value.key + (time.value - resume.value)
+}
+
+function jump(seconds) {
+  stopVideo()
+  time.value = seconds
+  park()
 }
 
 function toggle() {
   if (!ready.value) return
-  if (!playing.value && time.value >= duration.value) time.value = 0
+  if (!playing.value && time.value >= duration.value) jump(0)
   playing.value = !playing.value
+  if (!playing.value) {
+    stopVideo()
+    park()
+  }
 }
 
 function replay() {
   if (!ready.value) return
-  time.value = 0
+  jump(0)
   playing.value = true
+}
+
+function setWhole(value) {
+  if (whole.value === value) return
+  playing.value = false
+  whole.value = value
+  jump(0)
 }
 
 function reshuffle() {
@@ -189,7 +388,7 @@ function reshuffle() {
 
 function scrub(event) {
   playing.value = false
-  time.value = Number(event.target.value)
+  jump(Number(event.target.value))
 }
 
 function toggleColour() {
@@ -220,7 +419,7 @@ function applyReach() {
   if (!raw || !ready.value) return
   renderer.prepare(reached(), seed)
   renderer.setMattePreview(null)
-  time.value = reducedMotion ? duration.value : 0
+  jump(reducedMotion ? duration.value : effectStart.value) // straight to the effect
   playing.value = !reducedMotion
 }
 
@@ -311,7 +510,7 @@ function release(event) {
   else if (event.type === 'pointerup') toggle()
 }
 
-// A replaced photo is no longer the sample named in the address.
+// A replaced photo or video is no longer the sample named in the address.
 function replaceWith(file) {
   router.replace({ name: 'edit' })
   chosenFile.value = file
@@ -326,12 +525,12 @@ function pick(event) {
 
 function drop(event) {
   dragging.value = false
-  const file = [...event.dataTransfer.files].find(item => item.type.startsWith('image/'))
+  const file = [...event.dataTransfer.files].find(item => /^(image|video)\//.test(item.type))
   if (file) replaceWith(file)
 }
 
 function onKey(event) {
-  if (event.code !== 'Space' || event.target.closest('button, input')) return
+  if (event.code !== 'Space' || picking.value || event.target.closest('button, input')) return
   event.preventDefault()
   toggle()
 }
@@ -363,6 +562,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  dropClip()
   cancelAnimationFrame(frame)
   clearTimeout(lingering)
   window.removeEventListener('keydown', onKey)
@@ -398,6 +598,7 @@ onBeforeUnmount(() => {
               @pointerup="release"
               @pointercancel="release"
             ></canvas>
+            <video ref="video" class="clip" :class="{ under: !showVideo }" muted playsinline preload="auto"></video>
             <p v-if="status" class="status" role="status">{{ status }}</p>
           </div>
           <p class="drop-hint">Drop the photo to paint it</p>
@@ -410,23 +611,29 @@ onBeforeUnmount(() => {
           </button>
           <input
             class="scrubber"
+            :class="{ banded: hasKey }"
             type="range"
             min="0"
             :max="duration"
             step="0.01"
             :value="time"
             :disabled="!ready"
-            :style="{ '--progress': progress }"
+            :style="{ '--progress': progress, ...effectBand }"
             aria-label="Animation position"
             @input="scrub"
           >
+          <div v-if="hasKey" class="segmented" role="group" aria-label="Preview">
+            <button type="button" :aria-pressed="whole" :disabled="!ready" @click="setWhole(true)">Whole video</button>
+            <button type="button" :aria-pressed="!whole" :disabled="!ready" @click="setWhole(false)">Effect only</button>
+          </div>
           <button type="button" :disabled="!ready" @click="replay">Replay</button>
         </footer>
       </div>
 
       <aside class="panel" aria-label="Options">
-        <button class="primary wide" type="button" :disabled="unsupported" @click="fileInput.click()">Replace photo</button>
-        <input ref="fileInput" type="file" accept="image/*" hidden @change="pick">
+        <button class="primary wide" type="button" :disabled="unsupported" @click="fileInput.click()">{{ clip ? 'Replace video' : 'Replace photo' }}</button>
+        <button v-if="clip" class="wide" type="button" :disabled="clip.key == null && !picking" @click="changeKeyframe">Change keyframe</button>
+        <input ref="fileInput" type="file" accept="image/*,video/*" hidden @change="pick">
         <PanelSection title="Fill">
           <div class="panel-actions">
             <button type="button" :disabled="!ready" @click="reshuffle">New pour</button>
@@ -557,8 +764,17 @@ onBeforeUnmount(() => {
     </div>
 
     <p class="note">
-      Everything runs in your browser; the photo is never uploaded.
+      Everything runs in your browser; {{ clip ? 'the video' : 'the photo' }} is never uploaded.
       <template v-if="credit">Photo by <a :href="credit.page" target="_blank" rel="noopener">{{ credit.by }}</a> on Pexels.</template>
     </p>
+    <KeyframePicker
+      v-if="picking && clip"
+      :src="clip.url"
+      :duration="clip.duration"
+      :initial="clip.key ?? 0"
+      :cancellable="clip.key != null"
+      @confirm="useKeyframe"
+      @cancel="picking = false"
+    />
   </main>
 </template>
