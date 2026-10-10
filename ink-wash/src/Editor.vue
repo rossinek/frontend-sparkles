@@ -47,7 +47,8 @@ let videoRunning = false
 // Lettering (PoC): one block of text, edited with Fabric.js on a layer over the picture and
 // handed to the renderer as a texture, so it becomes part of the painting.
 const textLayer = ref(null)
-const editingText = ref(false)
+const editingText = ref(false) // picked up: the final frame is shown, with handles on the text
+const overText = ref(false)
 const hasText = ref(false)
 const textAlign = ref('left')
 const textSize = ref(150)
@@ -57,6 +58,25 @@ const textStrength = ref(0.9)
 let fabric = null
 let board = null
 let lettering = null
+let resumeAfterText = false
+
+// Whether a point of the picture, as it is shown right now, lies on the lettering. The text
+// is laid out in the final frame, so the point is taken to the sheet through the camera of
+// the moment and back through the final one.
+function onText(event) {
+  if (!lettering || !renderer.textShown) return false
+  const box = canvas.value.getBoundingClientRect()
+  const { width, height } = canvas.value
+  const now = renderer.camera
+  const to = finalView(framing.value)
+  const view = [(event.clientX - box.left - box.width / 2) / box.height - now.pan[0], (box.height / 2 - (event.clientY - box.top)) / box.height - now.pan[1]]
+  const back = (-now.rotation * Math.PI) / 180
+  const sheet = [(Math.cos(back) * view[0] - Math.sin(back) * view[1]) / now.scale, (Math.sin(back) * view[0] + Math.cos(back) * view[1]) / now.scale]
+  const turn = (to.rotation * Math.PI) / 180
+  const x = to.scale * (Math.cos(turn) * sheet[0] - Math.sin(turn) * sheet[1]) + to.pan[0]
+  const y = to.scale * (Math.sin(turn) * sheet[0] + Math.cos(turn) * sheet[1]) + to.pan[1]
+  return lettering.containsPoint(new fabric.Point(x * height + width / 2, height / 2 - y * height))
+}
 let drawn = 0        // when the canvas was last drawn
 
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -217,6 +237,10 @@ async function addText() {
         : null
       textSize.value = picked ?? lettering.fontSize
     }
+    // A click away from the text puts it down.
+    board.on('selection:cleared', () => {
+      if (editingText.value) setTextEditing(false)
+    })
     board.on('text:selection:changed', follow)
     board.on('text:editing:entered', follow)
   }
@@ -246,9 +270,15 @@ async function addText() {
   setTextEditing(true)
 }
 
+// Picking the text up shows the final frame, where it is laid out, and pauses the animation;
+// putting it down returns to the animation as it was.
 function setTextEditing(value) {
+  if (value === editingText.value) return
   editingText.value = value
-  playing.value = false
+  overText.value = false
+  if (value) resumeAfterText = playing.value
+  playing.value = value ? false : resumeAfterText
+  resumeAfterText = false
   renderer.setTextEdit(value)
   if (!value) {
     lettering?.exitEditing()
@@ -260,6 +290,7 @@ function setTextEditing(value) {
 
 // Size applies to the selected characters while some are selected, otherwise to all of it.
 function setTextSize(event) {
+  setTextEditing(true)
   textSize.value = Number(event.target.value)
   if (lettering.isEditing && lettering.selectionStart !== lettering.selectionEnd) lettering.setSelectionStyles({ fontSize: textSize.value })
   else {
@@ -272,6 +303,7 @@ function setTextSize(event) {
 }
 
 function setTextLine(event) {
+  setTextEditing(true)
   textLine.value = Number(event.target.value)
   lettering.set('lineHeight', textLine.value)
   lettering.initDimensions()
@@ -280,26 +312,29 @@ function setTextLine(event) {
 }
 
 function setTextAlign(value) {
+  setTextEditing(true)
   textAlign.value = value
   lettering.set('textAlign', value)
   board.requestRenderAll()
 }
 
 function setTextTone(light) {
+  setTextEditing(true)
   textLight.value = light
   renderer.setTextStyle({ light, strength: textStrength.value })
 }
 
 function setTextStrength(event) {
+  setTextEditing(true)
   textStrength.value = Number(event.target.value)
   renderer.setTextStyle({ light: textLight.value, strength: textStrength.value })
 }
 
 function removeText() {
+  setTextEditing(false)
   board.remove(lettering)
   lettering = null
   hasText.value = false
-  setTextEditing(false)
   pushText()
 }
 
@@ -516,6 +551,8 @@ function jump(seconds) {
 
 function toggle() {
   if (!ready.value) return
+  resumeAfterText = false
+  setTextEditing(false)
   if (!playing.value && time.value >= duration.value) jump(0)
   playing.value = !playing.value
   if (!playing.value) {
@@ -526,6 +563,8 @@ function toggle() {
 
 function replay() {
   if (!ready.value) return
+  resumeAfterText = false
+  setTextEditing(false)
   jump(0)
   playing.value = true
 }
@@ -545,6 +584,8 @@ function reshuffle() {
 }
 
 function scrub(event) {
+  resumeAfterText = false
+  setTextEditing(false)
   playing.value = false
   jump(Number(event.target.value))
 }
@@ -641,8 +682,9 @@ function resetFrame() {
   panWanted.value = [0, 0]
 }
 
-// A press on the picture is a click (play or pause) until it moves; then it drags the photo
-// to where it should sit in the final frame.
+// A press on the picture is a click until it moves; then it drags the photo to where it
+// should sit in the final frame. A click picks the lettering up when it lands on it, and
+// plays or pauses otherwise.
 function press(event) {
   if (!ready.value) return
   grab = { id: event.pointerId, x: event.clientX, y: event.clientY, pan: framing.value.pan, moved: false }
@@ -650,6 +692,7 @@ function press(event) {
 }
 
 function drag(event) {
+  if (!grab) overText.value = onText(event)
   if (!grab || event.pointerId !== grab.id) return
   const dx = event.clientX - grab.x
   const dy = event.clientY - grab.y
@@ -665,7 +708,9 @@ function release(event) {
   const { moved } = grab
   grab = null
   if (moved) endPlanning()
-  else if (event.type === 'pointerup') toggle()
+  else if (event.type !== 'pointerup') return
+  else if (onText(event)) setTextEditing(true)
+  else toggle()
 }
 
 // A replaced photo or video is no longer the sample named in the address.
@@ -688,6 +733,7 @@ function drop(event) {
 }
 
 function onKey(event) {
+  if (event.code === 'Escape' && editingText.value && !event.target.closest('textarea')) return setTextEditing(false)
   if (event.code !== 'Space' || picking.value || editingText.value || event.target.closest('button, input, textarea')) return
   event.preventDefault()
   toggle()
@@ -752,6 +798,7 @@ onBeforeUnmount(() => {
               ref="canvas"
               width="1600"
               height="1006"
+              :class="{ 'over-text': overText }"
               @pointerdown="press"
               @pointermove="drag"
               @pointerup="release"
@@ -870,44 +917,6 @@ onBeforeUnmount(() => {
           </label>
         </PanelSection>
 
-        <PanelSection title="Text">
-          <div class="panel-actions">
-            <button v-if="!hasText" type="button" :disabled="!ready" @click="addText">Add text</button>
-            <template v-else>
-              <button type="button" :aria-pressed="editingText" @click="setTextEditing(!editingText)">{{ editingText ? 'Done' : 'Edit text' }}</button>
-              <button type="button" @click="removeText">Remove</button>
-            </template>
-          </div>
-          <template v-if="hasText">
-            <p class="section-note">Shown in the final frame. Double-click the text to type; drag it, or use its handles to scale and turn it. Select part of it to size that part alone.</p>
-            <div class="field inline">
-              <span>Colour</span>
-              <div class="segmented" role="group" aria-label="Text colour">
-                <button type="button" :aria-pressed="!textLight" @click="setTextTone(false)">Dark</button>
-                <button type="button" :aria-pressed="textLight" @click="setTextTone(true)">Light</button>
-              </div>
-            </div>
-            <label class="field">
-              <span class="field-head"><span>Intensity</span><output>{{ Math.round(textStrength * 100) }}%</output></span>
-              <input class="scrubber" type="range" min="0" max="1" step="0.01" :value="textStrength" :style="{ '--progress': `${textStrength * 100}%` }" @input="setTextStrength">
-            </label>
-            <div class="field inline">
-              <span>Align</span>
-              <div class="segmented" role="group" aria-label="Alignment">
-                <button v-for="side in ['left', 'center', 'right']" :key="side" type="button" :aria-pressed="textAlign === side" @click="setTextAlign(side)">{{ side[0].toUpperCase() + side.slice(1) }}</button>
-              </div>
-            </div>
-            <label class="field">
-              <span class="field-head"><span>Size</span><output>{{ Math.round(textSize) }}</output></span>
-              <input class="scrubber" type="range" min="30" max="420" step="1" :value="textSize" :style="{ '--progress': `${((textSize - 30) / 390) * 100}%` }" @input="setTextSize">
-            </label>
-            <label class="field">
-              <span class="field-head"><span>Line height</span><output>{{ textLine.toFixed(2) }}</output></span>
-              <input class="scrubber" type="range" min="0.5" max="1.8" step="0.01" :value="textLine" :style="{ '--progress': `${((textLine - 0.5) / 1.3) * 100}%` }" @input="setTextLine">
-            </label>
-          </template>
-        </PanelSection>
-
         <PanelSection title="Motion">
           <template #actions>
             <button v-if="ready && framed" class="icon-quiet" type="button" aria-label="Reset frame" title="Reset frame" @click="resetFrame">
@@ -959,6 +968,43 @@ onBeforeUnmount(() => {
             <span class="hint" tabindex="0" aria-describedby="tip-outro">Outro<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" /><path d="M8 7.2v4M8 4.7v.1" /></svg><span id="tip-outro" class="tip" role="tooltip">After the painting, the camera returns to the photo's own frame and the photo spreads back over it from the middle.</span></span>
             <input class="switch" type="checkbox" :checked="outro" :disabled="!ready" @change="setOutro">
           </label>
+        </PanelSection>
+
+        <PanelSection title="Text">
+          <div class="panel-actions">
+            <button v-if="!hasText" type="button" :disabled="!ready" @click="addText">Add text</button>
+            <template v-else>
+              <button type="button" @click="removeText">Remove text</button>
+            </template>
+          </div>
+          <template v-if="hasText">
+            <p class="section-note">Click the text on the picture to pick it up, shown in the final frame: drag it, or use its handles to scale and turn it. Double-click to type. Select part of it to size that part alone. Click away when done.</p>
+            <div class="field inline">
+              <span>Colour</span>
+              <div class="segmented" role="group" aria-label="Text colour">
+                <button type="button" :aria-pressed="!textLight" @click="setTextTone(false)">Dark</button>
+                <button type="button" :aria-pressed="textLight" @click="setTextTone(true)">Light</button>
+              </div>
+            </div>
+            <label class="field">
+              <span class="field-head"><span>Intensity</span><output>{{ Math.round(textStrength * 100) }}%</output></span>
+              <input class="scrubber" type="range" min="0" max="1" step="0.01" :value="textStrength" :style="{ '--progress': `${textStrength * 100}%` }" @input="setTextStrength">
+            </label>
+            <div class="field inline">
+              <span>Align</span>
+              <div class="segmented" role="group" aria-label="Alignment">
+                <button v-for="side in ['left', 'center', 'right']" :key="side" type="button" :aria-pressed="textAlign === side" @click="setTextAlign(side)">{{ side[0].toUpperCase() + side.slice(1) }}</button>
+              </div>
+            </div>
+            <label class="field">
+              <span class="field-head"><span>Size</span><output>{{ Math.round(textSize) }}</output></span>
+              <input class="scrubber" type="range" min="30" max="420" step="1" :value="textSize" :style="{ '--progress': `${((textSize - 30) / 390) * 100}%` }" @input="setTextSize">
+            </label>
+            <label class="field">
+              <span class="field-head"><span>Line height</span><output>{{ textLine.toFixed(2) }}</output></span>
+              <input class="scrubber" type="range" min="0.5" max="1.8" step="0.01" :value="textLine" :style="{ '--progress': `${((textLine - 0.5) / 1.3) * 100}%` }" @input="setTextLine">
+            </label>
+          </template>
         </PanelSection>
       </aside>
     </div>

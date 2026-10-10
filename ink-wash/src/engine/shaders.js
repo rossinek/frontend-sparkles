@@ -564,9 +564,9 @@ void main() {
   // Lettering: written in ink on the paper. It belongs to the picture, so it takes the
   // paper's tooth, arrives with the paper, and moves with the camera.
   // It is laid out in the final frame, wherever the camera ends up, so it can sit on the
-  // margin as well as on the photo. It arrives with the strong ink: at first only the
+  // margin as well as on the photo. It arrives a beat after the strong ink: at first only the
   // heaviest parts of the strokes, bitten into by noise, which then spread to the full
-  // letters in about 0.7 s.
+  // letters in about 1.2 s.
   if (uTextOn > 0.5) {
     vec2 q = (uv - 0.5) * uAspect;
     vec2 at = (vec2(dot(uTextX, q), dot(uTextY, q)) + uTextPan) / uAspect + 0.5;

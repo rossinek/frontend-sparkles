@@ -145,6 +145,7 @@ canvas {
   pointer-events: none;
 }
 
+.frame canvas.over-text { cursor: text; }
 .text-layer.editing { visibility: visible; pointer-events: auto; }
 .text-layer .canvas-container { width: 100% !important; height: 100% !important; }
 .text-layer canvas { max-height: none; background: none; cursor: default; }

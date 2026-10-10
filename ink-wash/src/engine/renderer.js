@@ -119,6 +119,8 @@ function createProgram(gl, vertex, fragmentSource) {
   return { program, uniforms }
 }
 
+const TEXT_START = TIMELINE.accent[0] + 0.5 // the lettering comes a beat after the strong ink
+
 export function createRenderer(canvas) {
   const gl = canvas.getContext('webgl2', { antialias: false, alpha: false })
   if (!gl) throw new Error('WebGL2 is not available')
@@ -407,6 +409,8 @@ export function createRenderer(canvas) {
         pan: [camera.pan[0] * (1 - back), camera.pan[1] * (1 - back)],
       }, state.width / state.height, WIDE)
     }
+    state.camera = camera
+    state.textShown = state.text && t >= TEXT_START && after <= 0
     const angle = (camera.rotation * Math.PI) / 180
     const cos = Math.cos(angle) / camera.scale
     const sin = Math.sin(angle) / camera.scale
@@ -446,7 +450,7 @@ export function createRenderer(canvas) {
           uTextPan: pulledBack ? framing.pan : [0, 0],
         }
       })(),
-      uTextStart: TIMELINE.accent[0] + 0.5, // a beat after the strong ink
+      uTextStart: TEXT_START,
       uTextLight: state.textLight ? 1 : 0,
       uTextStrength: state.textStrength,
       uOutro: after > 0 ? after : -1,
@@ -510,6 +514,9 @@ export function createRenderer(canvas) {
     setMotion: value => { state.motion = value },
     get ready() { return state.ready },
     /** True while a setting is being previewed instead of the animation. */
+    /** The camera of the frame drawn last, and whether the lettering is on show in it. */
+    get camera() { return state.camera },
+    get textShown() { return state.textShown },
     get previewing() { return state.planning || state.sketchOnly || state.finished || state.matteView || state.textEdit },
   }
 }
