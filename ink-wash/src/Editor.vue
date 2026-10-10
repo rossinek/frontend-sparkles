@@ -14,6 +14,7 @@ const router = useRouter()
 
 const canvas = ref(null)
 const fileInput = ref(null)
+const panel = ref(null)
 const time = ref(0)
 const playing = ref(false)
 const ready = ref(false)
@@ -873,6 +874,16 @@ function drop(event) {
   if (file) replaceWith(file)
 }
 
+// What scrolls out of the panel fades away at that edge, by as much as there is hidden.
+let panelWatch = null
+function fadePanel() {
+  const box = panel.value
+  if (!box) return
+  const reach = 36
+  box.style.setProperty('--fade-top', `${Math.min(box.scrollTop, reach)}px`)
+  box.style.setProperty('--fade-bottom', `${Math.min(box.scrollHeight - box.clientHeight - box.scrollTop, reach)}px`)
+}
+
 function onKey(event) {
   if ((event.metaKey || event.ctrlKey) && !event.altKey && (event.code === 'KeyZ' || event.code === 'KeyY')) {
     event.preventDefault()
@@ -896,6 +907,9 @@ onMounted(async () => {
   worker = new Worker(new URL('./engine/models.worker.js', import.meta.url), { type: 'module' })
   worker.onmessage = onWorkerMessage
   window.addEventListener('keydown', onKey)
+  // Folding a section changes how much there is to scroll.
+  panelWatch = new ResizeObserver(fadePanel)
+  for (const part of [panel.value, ...panel.value.children]) panelWatch.observe(part)
   last = performance.now()
   frame = requestAnimationFrame(tick)
   // The start screen hands over either a sample (named in the address) or a file.
@@ -911,6 +925,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  panelWatch?.disconnect()
   board?.dispose()
   dropClip()
   cancelAnimationFrame(frame)
@@ -992,7 +1007,7 @@ onBeforeUnmount(() => {
         </footer>
       </div>
 
-      <aside class="panel" aria-label="Options">
+      <aside ref="panel" class="panel" aria-label="Options" @scroll.passive="fadePanel">
         <button class="primary wide" type="button" :disabled="unsupported" @click="fileInput.click()">{{ clip ? 'Replace video' : 'Replace photo' }}</button>
         <button v-if="clip" class="wide" type="button" :disabled="clip.key == null && !picking" @click="changeKeyframe">Change keyframe</button>
         <input ref="fileInput" type="file" accept="image/*,video/*" hidden @change="pick">

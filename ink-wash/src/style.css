@@ -317,8 +317,13 @@ canvas {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  /* The scrolling area runs out to the window's edge, with the page's side padding inside it. */
+  --edge: calc(24px + max(0px, (100vw - 1560px) / 2));
+  margin-right: calc(-1 * var(--edge));
+  padding-right: var(--edge);
   overflow-y: auto;
   scrollbar-width: thin;
+  mask-image: linear-gradient(to bottom, transparent, #000 var(--fade-top, 0px), #000 calc(100% - var(--fade-bottom, 0px)), transparent);
 }
 
 .panel > button.wide { margin-bottom: 10px; padding-block: 13px; }
@@ -790,7 +795,7 @@ canvas { touch-action: none; }
   .lead { font-size: 27px; }
   .app { height: auto; min-height: 100dvh; }
   .workspace { grid-template-columns: minmax(0, 1fr); gap: 20px; }
-  .panel { overflow: visible; }
+  .panel { margin-right: 0; padding-right: 0; overflow: visible; }
   canvas { max-height: 70dvh; }
 }
 
