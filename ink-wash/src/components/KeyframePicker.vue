@@ -6,7 +6,7 @@ const props = defineProps({
   duration: { type: Number, required: true },
   initial: { type: Number, default: 0 },
   // The first choice for a new video is required; later ones can be backed out of.
-  cancellable: { type: Boolean, default: false },
+  cancelable: { type: Boolean, default: false },
 })
 const emit = defineEmits(['confirm', 'cancel'])
 
@@ -97,7 +97,7 @@ function onMeta() {
 }
 
 function onKey(event) {
-  if (event.key === 'Escape' && props.cancellable) emit('cancel')
+  if (event.key === 'Escape' && props.cancelable) emit('cancel')
 }
 
 onMounted(() => {
@@ -139,7 +139,7 @@ onBeforeUnmount(() => {
         <output>{{ stamp(at) }} / {{ stamp(duration) }}</output>
       </div>
       <div class="modal-actions">
-        <button v-if="cancellable" type="button" @click="emit('cancel')">Cancel</button>
+        <button v-if="cancelable" type="button" @click="emit('cancel')">Cancel</button>
         <button class="primary" type="button" @click="emit('confirm', at)">Use this frame</button>
       </div>
     </div>

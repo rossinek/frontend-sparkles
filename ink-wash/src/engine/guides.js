@@ -91,7 +91,7 @@ function resample(map, w, h, mode = 'linear') {
   return out
 }
 
-// Median over a square window, on values in 0…1 quantised to 256 levels.
+// Median over a square window, on values in 0…1 quantized to 256 levels.
 function median(src, w, h, size) {
   const r = size >> 1
   const out = new Float32Array(w * h)
@@ -165,7 +165,7 @@ export function buildGuides(photo, maps) {
   const tone = new Float32Array(n)
   for (let i = 0; i < n; i++) tone[i] = 1 - Math.min(1, Math.max(0, (gray[i] - lo) / Math.max(hi - lo, 0.2)))
 
-  // dark: broad tone, partly equalised so every photo uses all the passes.
+  // dark: broad tone, partly equalized so every photo uses all the passes.
   const dark = blur(tone, w, h, 5 * unit)
   const bins = new Uint32Array(256)
   for (let i = 0; i < n; i++) bins[Math.min(255, Math.floor(dark[i] * 255))]++
@@ -191,7 +191,7 @@ export function buildGuides(photo, maps) {
   const drawn = new Float32Array(n)
   for (let i = 0; i < n; i++) drawn[i] = line[i] * subject[i]
 
-  // Shading side: towards the darker side of a broad step in brightness, otherwise one
+  // Shading side: toward the darker side of a broad step in brightness, otherwise one
   // shared direction, as if the scene were lit from a single side.
   const [sx, sy] = gradient(blur(shade, w, h, 14 * unit), w, h)
   const slope = new Float32Array(n)

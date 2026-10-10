@@ -20,7 +20,7 @@ export const TIMELINE = {
 }
 
 // The camera leaves for the planned frame once the paper has covered the photo, and the
-// scene past the photo's edge goes on finishing afterwards. Seconds.
+// scene past the photo's edge goes on finishing afterward. Seconds.
 export const PULL = { start: TIMELINE.paper[0] + TIMELINE.paper[1], total: 6.6 }
 const TAIL = PULL.total - PULL.start // seconds from the start of the move to the last moment
 
@@ -206,7 +206,7 @@ export function createRenderer(canvas) {
     upload('photo', source)
   }
 
-  // A greyscale model output as a canvas, so it uploads and flips like the photo does.
+  // A grayscale model output as a canvas, so it uploads and flips like the photo does.
   function asCanvas({ width, height, data }) {
     const surface = document.createElement('canvas')
     surface.width = width

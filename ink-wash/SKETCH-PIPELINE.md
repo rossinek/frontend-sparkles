@@ -18,34 +18,34 @@ All run once per photo. Sizes are downloads.
 
 | Model | Purpose | Size | Source | Input | Output |
 | --- | --- | --- | --- | --- | --- |
-| RMBG-1.4 (q8) | subject matte | 44 MB | `briaai/RMBG-1.4` | 1024×1024, `x/255 - 0.5` | matte; rescale min–max, then `smoothstep(0.3, 0.7)` to remove the faint haze the quantised model leaves in the background |
+| RMBG-1.4 (q8) | subject matte | 44 MB | `briaai/RMBG-1.4` | 1024×1024, `x/255 - 0.5` | matte; rescale min–max, then `smoothstep(0.3, 0.7)` to remove the faint haze the quantized model leaves in the background |
 | Informative Drawings, **anime** style | contours | 17 MB | `x-Liola-x/informative-drawings-onnx`, `informative-drawings_anime_1024x1024.onnx` | `inputs`, 1024×1024, RGB `x/255`, photo squashed to a square | `outputs` 1×1×1024×1024, white paper and dark lines; `line = 1 - output` |
 | Depth Anything V2 small (q8) | stroke direction away from the focus | 27 MB | `onnx-community/depth-anything-v2-small`, `onnx/model_quantized.onnx` | `pixel_values`, long side 518 rounded to a multiple of 14, ImageNet mean/std | `predicted_depth`; rescale min–max, 1 = near |
 | UniSal (fp16) | where people look | 6.5 MB | `litert-community/UniSal-Saliency-LiteRT`, `unisal_fp16.tflite` | 256×256, ImageNet mean/std, NCHW | **logits**; `sigmoid`, then divide by the maximum |
 
 The "contour" style of Informative Drawings was rejected: its lines are as bold as a felt pen and it dropped the sunglasses.
 
-Licences: Informative Drawings MIT, Depth Anything V2 small Apache-2.0, UniSal Apache-2.0, RMBG-1.4 non-commercial.
+Licenses: Informative Drawings MIT, Depth Anything V2 small Apache-2.0, UniSal Apache-2.0, RMBG-1.4 non-commercial.
 
 ## Maps
 
 `unit = longSide / 1400`. Every length and blur radius below is in pixels at a 1400px long side and is multiplied by `unit`. `smooth(a, b, x)` is a smoothstep.
 
-1. **tone** — grey photo, stretched between its 2nd and 98th percentile (range at least 0.2), inverted. 1 = dark.
-2. **dark** — `tone` blurred (σ 5), then partially equalised: `0.35 * dark + 0.65 * rank(dark)`, where `rank` is the value's quantile within the image (256 levels). Every photo therefore uses all the passes.
-3. **shade** — true darkness, used only inside the focus: `tone` at one third resolution, median 7×7, back up, blur σ 1.5. No equalisation, no lift.
+1. **tone** — gray photo, stretched between its 2nd and 98th percentile (range at least 0.2), inverted. 1 = dark.
+2. **dark** — `tone` blurred (σ 5), then partially equalized: `0.35 * dark + 0.65 * rank(dark)`, where `rank` is the value's quantile within the image (256 levels). Every photo therefore uses all the passes.
+3. **shade** — true darkness, used only inside the focus: `tone` at one third resolution, median 7×7, back up, blur σ 1.5. No equalization, no lift.
 4. **focus** — UniSal map blurred σ 10, then `smooth(0.12, 0.8)`.
 5. **subject** — the matte.
 6. **drawn** — `line * subject`, blurred σ 1.2.
 
 ### One-sided contour band
 
-Shading leaves each contour towards one side only.
+Shading leaves each contour toward one side only.
 
 - `(dx, dy)` = gradient of `shade` blurred at σ 14. The scale is deliberately coarse: around a small closed shape (a digit, a spectacle frame) the gradient cancels out.
 - `conf = smooth(0.3, 0.85, |grad| / p88)`, where `p88` is the 88th percentile of `|grad|` over pixels with `drawn > 0.2`.
-- **shared** direction: the mean of `grad * |grad|` over those pixels, normalised. If its resultant, `|mean| / sum(|grad|²)`, is below 0.25, use `(0.6, 0.8)` instead (down and to the right).
-- `n = normalise(conf * grad/|grad| + (1 - conf) * shared)`, each component blurred σ 4 before normalising.
+- **shared** direction: the mean of `grad * |grad|` over those pixels, normalized. If its resultant, `|mean| / sum(|grad|²)`, is below 0.25, use `(0.6, 0.8)` instead (down and to the right).
+- `n = normalize(conf * grad/|grad| + (1 - conf) * shared)`, each component blurred σ 4 before normalizing.
 - `band(x) = max over t in {1/14 … 14/14} of drawn(x - n(x) * 32 * t) * (1 - 0.5 * t)`, then `smooth(0.05, 0.32)`. A pixel is in the band when a contour lies just behind it.
 - `nearContour = band * shade`.
 
@@ -62,7 +62,7 @@ Averaged as double angles (`cos 2θ`, `sin 2θ`) so opposite gradients agree.
 All smooth random fields, fixed per photo:
 
 - `wobble` — σ 22, amplitude 55 px; added across the stroke rows so they are not ruler-straight.
-- `patch` — σ 40, normalised to ±1; breaks up the borders between direction patches.
+- `patch` — σ 40, normalized to ±1; breaks up the borders between direction patches.
 - `cluster` — σ 26, mapped to 0…1; leaves gaps of bare paper in the two open passes.
 - `dither` — white noise blurred σ 9; hides the steps between stroke-length levels.
 
@@ -131,7 +131,7 @@ graphite *= 0.7 + 0.3 * tooth          # the app's COMPOSITE shader already does
 Two controls replace "Sketch detail" and "Sketch shading".
 
 - **Hatching** (0…1, default 0.5): overall amount. Scales the driver before the pass ranges, `driver *= 2 * hatching`; 0 leaves contours only.
-- **Focus** (0…1, default 1): how much the viewer's attention changes the hatching. Implemented as `focus = focus * slider` everywhere above, which gives exactly the requested behaviour:
+- **Focus** (0…1, default 1): how much the viewer's attention changes the hatching. Implemented as `focus = focus * slider` everywhere above, which gives exactly the requested behavior:
   - 0 — attention is ignored; the whole subject is hatched from tone alone.
   - 1 — as approved.
   - 0.5 — halfway: the attended area is partly hatched as usual and partly with the short one-sided strokes.
@@ -142,7 +142,7 @@ Dragging either keeps the existing bare-drawing preview.
 
 Split by what each side is good at.
 
-- **Worker (`src/engine/models.worker.js`).** Matte, lines, and depth through Transformers.js. Each tries WebGPU first and falls back to WASM. On WebGPU the matte uses `fp16` (88 MB; the quantised model misbehaves there) and depth uses `fp16` (50 MB); on WASM both use the quantised files. The line model's repository has no config and keeps its files in the root, which `subfolder: ''` and `model_file_name` handle. Only the matte is required: without lines the edge-detection lines are used, without depth the strokes keep one slant, without attention `focus = 0`.
+- **Worker (`src/engine/models.worker.js`).** Matte, lines, and depth through Transformers.js. Each tries WebGPU first and falls back to WASM. On WebGPU the matte uses `fp16` (88 MB; the quantized model misbehaves there) and depth uses `fp16` (50 MB); on WASM both use the quantized files. The line model's repository has no config and keeps its files in the root, which `subfolder: ''` and `model_file_name` handle. Only the matte is required: without lines the edge-detection lines are used, without depth the strokes keep one slant, without attention `focus = 0`.
 - **Main thread (`src/engine/attention.js`).** UniSal through LiteRT.js on its WASM backend. LiteRT.js calls `importScripts`, which module workers do not have, so it cannot live in the worker. Its runtime is loaded from jsDelivr rather than bundled (37 MB).
 - **CPU, low resolution (`src/engine/guides.js`).** Everything that needs percentiles, a median, or wide blurs, on a 512px grid: `dark`, `shade`, `focus`, both direction fields, coherence, and the shading side `n`. Uploaded as three float textures. The median runs directly on the grid (7×7 there covers about the same area as the reference's window).
 - **GPU, full resolution (`HATCH` in `src/engine/shaders.js`).** The contour band (14 taps of the line texture along `-n`) and the strokes. Each pixel evaluates only its own snapped direction, so a pass is one stroke evaluation, not eight. Rendered into its own `pencil` texture (R: all graphite, G: contours alone) and again whenever a slider moves.

@@ -7,7 +7,7 @@ against it; delete it once the port matches.
         --with ai-edge-litert python sketch_reference.py name=/path/to/photo.jpg
 
 Expects ./models/ with informative-drawings_anime_1024x1024.onnx, depth.onnx
-(Depth Anything V2 small, quantised), rmbg.onnx (RMBG-1.4, quantised) and
+(Depth Anything V2 small, quantized), rmbg.onnx (RMBG-1.4, quantized) and
 unisal_fp16.tflite, and writes to ./out/.
 """
 import sys, time
@@ -18,7 +18,7 @@ from scipy.ndimage import gaussian_filter, map_coordinates
 from ai_edge_litert.interpreter import Interpreter
 
 LONG = 1400
-K = 8  # quantised stroke directions
+K = 8  # quantized stroke directions
 
 
 def load(path):
@@ -62,7 +62,7 @@ def matte(image, session):
     out = session.run(None, {name: np.float32(x.transpose(2, 0, 1)[None])})[0][0, 0]
     out = (out - out.min()) / (out.max() - out.min() + 1e-6)
     out = np.float32(Image.fromarray(np.float32(out)).resize(image.size, Image.BILINEAR)).clip(0, 1)
-    return smooth(0.3, 0.7, out)  # the quantised model leaves a faint haze in the background
+    return smooth(0.3, 0.7, out)  # the quantized model leaves a faint haze in the background
 
 
 def attention(image, net):
@@ -107,21 +107,21 @@ def sketch(image, line, near, subject, focus_raw):
 
     focus = smooth(0.12, 0.8, gaussian_filter(focus_raw, 10 * unit))
 
-    # Tone: broad masses away from the focus, finer inside it. Partial equalisation as before.
+    # Tone: broad masses away from the focus, finer inside it. Partial equalization as before.
     dark = gaussian_filter(tone, 5 * unit)  # the plain shading map, same everywhere
     levels = np.quantile(dark, np.linspace(0, 1, 256))
     dark = 0.35 * dark + 0.65 * np.interp(dark, levels, np.linspace(0, 1, 256))
 
-    # True darkness of the photo: inverted grey, median-blurred so texture and thin lines
-    # drop out but the edges of light and shadow stay sharp. No equalisation and no lift, so
+    # True darkness of the photo: inverted gray, median-blurred so texture and thin lines
+    # drop out but the edges of light and shadow stay sharp. No equalization and no lift, so
     # pale areas really get few strokes and dark ones many.
     small = Image.fromarray(np.uint8(np.clip(tone, 0, 1) * 255)).resize((max(1, w // 3), max(1, h // 3)), Image.BILINEAR)
     small = small.filter(ImageFilter.MedianFilter(7))
     shade = gaussian_filter(np.float32(small.resize((w, h), Image.BICUBIC)) / 255.0, 1.5 * unit)
     # One-sided contour band. Each contour throws its shading to one side only:
-    #  - where the photo has a clear, broad step in brightness, towards the darker side;
+    #  - where the photo has a clear, broad step in brightness, toward the darker side;
     #  - elsewhere (thin lines, small glyphs, where "darker" is all around or nowhere),
-    #    towards one shared direction, as if lit from a single side.
+    #    toward one shared direction, as if lit from a single side.
     # The step is measured at a coarse scale so small closed shapes cancel out.
     drawn = gaussian_filter(line * subject, 1.2 * unit)
     dy, dx = np.gradient(gaussian_filter(shade, 14 * unit))

@@ -75,14 +75,14 @@ const smooth = (a, b, x) => {
   return t * t * (3 - 2 * t)
 }
 
-// 16-neighbour stencil keeps fronts round instead of octagonal.
+// 16-neighbor stencil keeps fronts round instead of octagonal.
 const STENCIL = [
   [1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1],
   [2, 1], [2, -1], [-2, 1], [-2, -1], [1, 2], [1, -2], [-1, 2], [-1, -2],
 ].map(([dx, dy]) => [dx, dy, Math.hypot(dx, dy)])
 
 // Each seed spreads at its own pace (cost multiplier), so fast seeds grow into large
-// blots while slow ones stay small until a neighbour swallows them.
+// blots while slow ones stay small until a neighbor swallows them.
 function dijkstra(w, h, cost, seeds) {
   const n = w * h
   const dist = new Float32Array(n).fill(Infinity)
@@ -212,7 +212,7 @@ function slowness(field, w, h, pace) {
   return blur(out, w, h, 1, 1)
 }
 
-// Picks well-separated points, favouring high weights.
+// Picks well-separated points, favoring high weights.
 function pickSeeds(w, h, weight, count, minDist, rand) {
   const picked = []
   for (let attempt = 0; attempt < count * 400 && picked.length < count; attempt++) {
@@ -228,7 +228,7 @@ function pickSeeds(w, h, weight, count, minDist, rand) {
 /**
  * A soft continuation of the photo onto the wider sheet, so nothing past its edge is
  * a stretched edge pixel. Each quantity is spread outwards with a blur that grows with
- * distance (a normalised convolution over several scales). Subject and background are
+ * distance (a normalized convolution over several scales). Subject and background are
  * continued separately, so a dark figure does not smear into the pale ground beside it.
  *
  * @param {{ width: number, height: number, matte: Float32Array, luma: Float32Array, edge: Float32Array, outside: Float32Array }} input
@@ -402,7 +402,7 @@ export function buildFields({ width: w, height: h, matte, luma, edge, seed, outs
   }
   const paces = [0.5, 0.65, 0.9, 1.3, 1.9, 2.6].sort(() => rand() - 0.5)
   // The first blots land all over the picture, subject and background alike, only leaning
-  // towards darker places, and each at its own moment.
+  // toward darker places, and each at its own moment.
   const scatter = new Float32Array(n)
   for (let i = 0; i < n; i++) scatter[i] = outside && outside[i] > 0 ? 0 : 0.3 + 0.7 * (1 - luma[i]) ** 2
   const inkSeeds = [

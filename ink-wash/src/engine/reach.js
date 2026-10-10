@@ -7,7 +7,7 @@
 // second limit a floor or table at the subject's depth floods the frame at the first notch
 // of the slider; with it the subject grows outwards gradually.
 //
-// Both grow gently over most of the slider and then open up towards the end, so that at
+// Both grow gently over most of the slider and then open up toward the end, so that at
 // full reach every depth is accepted at any distance: the subject is the whole picture.
 const tolerance = reach => 40 * reach + 215 * reach ** 10
 const travel = reach => 0.3 * reach + 1.7 * reach ** 10
@@ -73,10 +73,10 @@ export function growMatte(matte, depth, reach) {
   const from = low - tolerance(reach)
   const to = high + tolerance(reach)
 
-  // Flood outwards from the subject through neighbours whose depth is in range, so
+  // Flood outwards from the subject through neighbors whose depth is in range, so
   // everything taken in is connected to it.
   const grown = new Float32Array(n)
-  const steps = new Int32Array(n) // travelled from the matte, in pixels; the queue is breadth-first
+  const steps = new Int32Array(n) // traveled from the matte, in pixels; the queue is breadth-first
   const queue = new Int32Array(n)
   const limit = Math.round(travel(reach) * Math.max(w, h))
   let head = 0

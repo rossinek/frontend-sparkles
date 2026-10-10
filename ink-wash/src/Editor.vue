@@ -18,7 +18,7 @@ const time = ref(0)
 const playing = ref(false)
 const ready = ref(false)
 const status = ref('Loading photo…')
-const colour = ref(false)
+const color = ref(false)
 const hatching = ref(0.5)
 const focus = ref(1)
 const reach = ref(0)
@@ -147,8 +147,8 @@ function carryText(before, after) {
   const { width, height } = canvas.value
   const from = finalView(before)
   const to = finalView(after)
-  const centre = lettering.getCenterPoint()
-  const view = [(centre.x - width / 2) / height - from.pan[0], (height / 2 - centre.y) / height - from.pan[1]]
+  const center = lettering.getCenterPoint()
+  const view = [(center.x - width / 2) / height - from.pan[0], (height / 2 - center.y) / height - from.pan[1]]
   const back = (-from.rotation * Math.PI) / 180
   const sheet = [(Math.cos(back) * view[0] - Math.sin(back) * view[1]) / from.scale, (Math.sin(back) * view[0] + Math.cos(back) * view[1]) / from.scale]
   const turn = (to.rotation * Math.PI) / 180
@@ -158,7 +158,7 @@ function carryText(before, after) {
   lettering.set({
     scaleX: lettering.scaleX * grow,
     scaleY: lettering.scaleY * grow,
-    angle: lettering.angle - (to.rotation - from.rotation), // the frame turns anticlockwise, Fabric clockwise
+    angle: lettering.angle - (to.rotation - from.rotation), // the frame turns counterclockwise, Fabric clockwise
   })
   lettering.setPositionByOrigin(new fabric.Point(x * height + width / 2, height / 2 - y * height), 'center', 'center')
   lettering.setCoords()
@@ -183,7 +183,7 @@ function scaled(bitmap, limit) {
   return surface
 }
 
-// Without a model the whole frame is painted, weighted towards the centre.
+// Without a model the whole frame is painted, weighted toward the center.
 function fallbackMatte() {
   const size = 256
   const data = new Uint8Array(size * size)
@@ -246,7 +246,7 @@ async function addText() {
   }
   const unit = Math.max(canvas.value.width, canvas.value.height) / 1600
   lettering = new fabric.IText('Directed by\nYour Name', {
-    // Fabric places objects by their centre.
+    // Fabric places objects by their center.
     left: canvas.value.width * 0.5,
     top: canvas.value.height * 0.5,
     fontFamily: 'Cherish',
@@ -590,9 +590,9 @@ function scrub(event) {
   jump(Number(event.target.value))
 }
 
-function toggleColour() {
-  colour.value = !colour.value
-  renderer.setTint(colour.value ? 1 : 0)
+function toggleColor() {
+  color.value = !color.value
+  renderer.setTint(color.value ? 1 : 0)
 }
 
 // Dragging a sketch slider previews the bare drawing; releasing it returns to the animation.
@@ -846,7 +846,7 @@ onBeforeUnmount(() => {
         <PanelSection title="Fill">
           <div class="panel-actions">
             <button type="button" :disabled="!ready" @click="reshuffle">New pour</button>
-            <button type="button" :disabled="!ready" :aria-pressed="colour" @click="toggleColour">Colour</button>
+            <button type="button" :disabled="!ready" :aria-pressed="color" @click="toggleColor">Color</button>
           </div>
           <label v-if="hasDepth" class="field">
             <span class="field-head"><span class="hint" tabindex="0" aria-describedby="tip-reach">Reach<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" /><path d="M8 7.2v4M8 4.7v.1" /></svg><span id="tip-reach" class="tip" role="tooltip">Grows the subject to things at a similar depth that the cut-out missed.</span></span><output>{{ Math.round(reach * 100) }}%</output></span>
@@ -980,8 +980,8 @@ onBeforeUnmount(() => {
           <template v-if="hasText">
             <p class="section-note">Click the text on the picture to pick it up, shown in the final frame: drag it, or use its handles to scale and turn it. Double-click to type. Select part of it to size that part alone. Click away when done.</p>
             <div class="field inline">
-              <span>Colour</span>
-              <div class="segmented" role="group" aria-label="Text colour">
+              <span>Color</span>
+              <div class="segmented" role="group" aria-label="Text color">
                 <button type="button" :aria-pressed="!textLight" @click="setTextTone(false)">Dark</button>
                 <button type="button" :aria-pressed="textLight" @click="setTextTone(true)">Light</button>
               </div>
@@ -1018,7 +1018,7 @@ onBeforeUnmount(() => {
       :src="clip.url"
       :duration="clip.duration"
       :initial="clip.key ?? 0"
-      :cancellable="clip.key != null"
+      :cancelable="clip.key != null"
       @confirm="useKeyframe"
       @cancel="picking = false"
     />

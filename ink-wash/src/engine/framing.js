@@ -22,7 +22,7 @@ export function minScale(degrees, aspect, wide) {
  * pulled back only as far as needed, so both come back when there is room again.
  *
  * @param {{ rotation: number, scale: number, pan: [number, number] }} wanted pan is where
- *   the photo's centre sits, relative to the viewport's centre
+ *   the photo's center sits, relative to the viewport's center
  * @returns {{ rotation: number, scale: number, pan: [number, number], minScale: number, still: boolean }}
  */
 export function effective(wanted, aspect, wide) {
@@ -31,7 +31,7 @@ export function effective(wanted, aspect, wide) {
   const angle = (wanted.rotation * Math.PI) / 180
   const cos = Math.cos(angle)
   const sin = Math.sin(angle)
-  // The viewport seen from the photo's own axes: its centre and the half-size of its bounds.
+  // The viewport seen from the photo's own axes: its center and the half-size of its bounds.
   const dx = -(cos * wanted.pan[0] + sin * wanted.pan[1]) / scale
   const dy = -(-sin * wanted.pan[0] + cos * wanted.pan[1]) / scale
   const roomX = Math.max(0, (wide * aspect) / 2 - (aspect * Math.abs(cos) + Math.abs(sin)) / (2 * scale))

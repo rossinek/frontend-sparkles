@@ -273,7 +273,7 @@ uniform vec2 uSize;
 // Each front: x = start (s), y = duration (s), z = easing exponent.
 uniform vec3 uPaper, uInk, uAccent;
 uniform float uTint, uSeed, uStage, uTime, uSketchOnly, uPad;
-// The camera: where the photo's centre sits in the viewport, and the rows of the matrix
+// The camera: where the photo's center sits in the viewport, and the rows of the matrix
 // that takes a viewport point (in viewport heights) back onto the photo.
 uniform vec2 uPan, uCamX, uCamY;
 uniform float uGuides; // 0…1: thirds drawn over the photo while the final frame is planned
@@ -321,8 +321,8 @@ vec3 agedPaper(vec2 p, vec2 uv, float tooth) {
   col *= 0.86 + 0.26 * clouds;
   col = mix(col, vec3(0.67, 0.55, 0.39), smoothstep(0.52, 0.85, mottle) * 0.4);
   col = mix(col, vec3(0.93, 0.87, 0.74), smoothstep(0.55, 0.9, fbm(p * 3.3 - uSeed)) * 0.3);
-  float fibre = noise(vec2(p.x * 260.0, p.y * 9.0)) * noise(vec2(p.x * 14.0, p.y * 330.0));
-  col *= 0.96 + 0.06 * tooth + 0.025 * fibre;
+  float fiber = noise(vec2(p.x * 260.0, p.y * 9.0)) * noise(vec2(p.x * 14.0, p.y * 330.0));
+  col *= 0.96 + 0.06 * tooth + 0.025 * fiber;
   float speck = smoothstep(0.985, 1.0, noise(p * 150.0 + uSeed)) * smoothstep(0.5, 0.8, noise(p * 9.0));
   col *= 1.0 - 0.45 * speck;
   vec2 v = uv - 0.5;
@@ -364,13 +364,13 @@ float blots(vec2 p) {
   float tone = 0.0;
   for (int i = 0; i < 10; i++) {
     float k = float(i) + uSeed * 5.3;
-    vec2 centre = corner + vec2(hash(vec2(k, 2.1)), hash(vec2(k, 8.7))) * uPad * uAspect;
+    vec2 center = corner + vec2(hash(vec2(k, 2.1)), hash(vec2(k, 8.7))) * uPad * uAspect;
     float radius = mix(0.1, 0.26, pow(hash(vec2(k, 5.5)), 1.3));
     // Each drop lands at its own moment after the pull-back begins and spreads from a point.
     float born = uPullStart + 0.4 + 2.8 * hash(vec2(k, 6.6));
     float grown = smoothstep(0.0, 1.0, (uTime - born) / 1.8);
     if (grown <= 0.0) continue;
-    float d = length(p - centre + warp) / (radius * (0.25 + 0.75 * grown));
+    float d = length(p - center + warp) / (radius * (0.25 + 0.75 * grown));
     float reach = exp(-2.2 * d * d) * smoothstep(0.0, 0.25, grown); // at full size: the threshold below at the drop's own radius
     field += reach;
     tone += reach * mix(0.04, 0.1, hash(vec2(k, 3.9)));
@@ -491,7 +491,7 @@ void main() {
   // Levels are stretched to the subject so backlit or flat photos still get a full tonal range.
   float inkTone = 1.0 - clamp((luma - uLevels.x) / (uLevels.y - uLevels.x), 0.0, 1.0);
   float bodyDensity = 0.05 + 1.6 * pow(inkTone, 1.4);
-  // The first wash is thin; the darks flood in afterwards as their own, smaller blots.
+  // The first wash is thin; the darks flood in afterward as their own, smaller blots.
   vec4 second = texture(uField2, sheet + wobble * 0.014 / uAspect / uPad);
   float accentAge = min(uTime - easeOut(second.r + feather * 0.03, uAccent), inkAge - 0.1);
   // Past the edge the darks come with the wash itself, so they are there as it is revealed.
@@ -590,13 +590,13 @@ void main() {
   // the edges and close the picture quickly.
   if (uOutro > -0.5 && past < 0.5) {
     float ragged = 0.3 * clamp(field.r, 0.0, 1.0) + fine * 0.04;
-    float fromCentre = length((uv - 0.5) * uAspect) / (0.5 * length(uAspect));
+    float fromCenter = length((uv - 0.5) * uAspect) / (0.5 * length(uAspect));
     // Seconds until the middle blot gets here. It has a head start, so a first pool is
     // already open in the middle at the very moment the camera starts back.
     // Distance from the middle counts for only half of it; the rest is the paper's own
     // billowing pattern and broad lobes of noise, so the pool is lopsided, not a disc.
     float lobes = fbm(p * 2.6 + uSeed * 3.0) - 0.5;
-    float reached = 0.95 * (0.5 * fromCentre + 0.35 * clamp(field.r, 0.0, 1.0) + 0.45 * lobes + fine * 0.04) - 0.2;
+    float reached = 0.95 * (0.5 * fromCenter + 0.35 * clamp(field.r, 0.0, 1.0) + 0.45 * lobes + fine * 0.04) - 0.2;
     // Six blots along the edges, away from the corners: one per side and a second on the top
     // and bottom. Each is stretched along its edge, so it reads as a long pool creeping
     // inwards rather than a dot, and its outline wanders.
@@ -616,11 +616,11 @@ void main() {
     float wet = smoothstep(-0.1, 0.0, since) * (1.0 - shown);
     col = mix(col, vec3(0.99, 0.95, 0.86), wet * wet * 0.28); // the front runs ahead as clear water
     // Just uncovered, the photo is muted and tinted sepia, close to the painting it replaces;
-    // each spot takes its colour back over the next half second.
+    // each spot takes its color back over the next half second.
     // With a video, what comes back is the video, already playing again.
     vec3 back = texture(uLive, uv).rgb;
-    float grey = dot(back, vec3(0.299, 0.587, 0.114));
-    vec3 muted = mix(grey * vec3(1.06, 0.9, 0.7), back, 0.25); // sepia, like the ink
+    float gray = dot(back, vec3(0.299, 0.587, 0.114));
+    vec3 muted = mix(gray * vec3(1.06, 0.9, 0.7), back, 0.25); // sepia, like the ink
     col = mix(col, mix(muted, back, smoothstep(0.0, 0.5, since)), shown);
   }
   // Planning guides: the photo's own outline and four hairlines that cut it into thirds.

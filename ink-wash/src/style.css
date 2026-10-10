@@ -297,7 +297,7 @@ canvas {
 }
 
 /* One column as wide as the picture, so the transport sits right under it at its width.
-   Picture and transport are centred together in the space left of the panel. */
+   Picture and transport are centerd together in the space left of the panel. */
 .viewer {
   display: grid;
   grid-template-columns: fit-content(100%);
