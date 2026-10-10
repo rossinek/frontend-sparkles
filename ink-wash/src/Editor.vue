@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { createRenderer, durationFor, OUTRO_LENGTH, WIDE, WORK_SIZE } from './engine/renderer.js'
 import { effective, MAX_ROTATION, MAX_SCALE } from './engine/framing.js'
@@ -165,8 +165,131 @@ function carryText(before, after) {
   board.requestRenderAll()
 }
 
+// Undo and redo: every finished change leaves a snapshot of the options and the lettering,
+// and the last 30 can be stepped through. The source is not part of it; a new photo, video,
+// or keyframe starts the history over.
+const LIMIT = 30
+const canUndo = ref(false)
+const canRedo = ref(false)
+let history = []
+let cursor = -1
+let restores = 0 // snapshots still being put back
+let queue = Promise.resolve()
+let glance = 0
+
+const snapshot = () => ({
+  color: color.value,
+  hatching: hatching.value,
+  focus: focus.value,
+  reach: reach.value,
+  background: background.value,
+  rotation: rotation.value,
+  scale: scaleWanted.value,
+  pan: [...panWanted.value],
+  motion: motion.value,
+  outro: outro.value,
+  seed,
+  textLight: textLight.value,
+  textStrength: textStrength.value,
+  text: lettering ? lettering.toObject() : null,
+})
+
+function mark() {
+  canUndo.value = cursor > 0
+  canRedo.value = cursor < history.length - 1
+}
+
+function resetHistory() {
+  history = [JSON.stringify(snapshot())]
+  cursor = 0
+  mark()
+}
+
+function record() {
+  if (restores || cursor < 0) return
+  const now = JSON.stringify(snapshot())
+  if (now === history[cursor]) return
+  history = [...history.slice(Math.max(0, cursor + 1 - LIMIT), cursor + 1), now]
+  cursor = history.length - 1
+  mark()
+}
+
+// A change to the frame carries the lettering along a moment later, so the snapshot waits for that.
+const commit = () => nextTick(record)
+
+function step(by) {
+  if (!ready.value || picking.value) return
+  if (lettering?.isEditing) lettering.exitEditing() // typing in progress becomes a step of its own
+  const next = cursor + by
+  if (next < 0 || next >= history.length) return
+  cursor = next
+  mark()
+  restores += 1
+  const saved = history[next]
+  queue = queue.then(() => restore(JSON.parse(saved))).catch(error => console.error(error)).finally(() => { restores -= 1 })
+}
+
+async function restore(to) {
+  const from = snapshot()
+  const changed = key => JSON.stringify(to[key]) !== JSON.stringify(from[key])
+  color.value = to.color
+  hatching.value = to.hatching
+  focus.value = to.focus
+  reach.value = to.reach
+  background.value = to.background
+  rotation.value = to.rotation
+  scaleWanted.value = to.scale
+  panWanted.value = to.pan
+  motion.value = to.motion
+  outro.value = to.outro
+  textLight.value = to.textLight
+  textStrength.value = to.textStrength
+  seed = to.seed
+  if (changed('color')) renderer.setTint(to.color ? 1 : 0)
+  if (changed('hatching')) renderer.setHatching(to.hatching)
+  if (changed('focus')) renderer.setFocus(to.focus)
+  if (changed('background')) renderer.setBackground(to.background)
+  if (changed('motion')) renderer.setMotion(to.motion)
+  if (changed('outro')) renderer.setOutro(to.outro)
+  renderer.setTextStyle({ light: to.textLight, strength: to.textStrength })
+  if (changed('reach') && raw) renderer.prepare(reached(), seed)
+  else if (changed('seed')) renderer.reseed(seed)
+  await nextTick() // the frame has been handed on, without carrying the lettering: its own place was saved
+  if (changed('text')) {
+    const held = editingText.value
+    if (lettering) board.remove(lettering)
+    lettering = to.text ? dress(await fabric.IText.fromObject(to.text)) : null
+    hasText.value = !!lettering
+    if (lettering) {
+      board.add(lettering)
+      textSize.value = lettering.fontSize
+      textLine.value = lettering.lineHeight
+      textAlign.value = lettering.textAlign
+      if (held) board.setActiveObject(lettering)
+    } else {
+      if (held) setTextEditing(false)
+      pushText()
+    }
+    board.requestRenderAll()
+  }
+  // What changed may not be on show at this point of the animation, so the finished frame
+  // is put up for a moment.
+  if (editingText.value) return
+  if (changed('rotation') || changed('scale') || changed('pan')) {
+    plan()
+    endPlanning()
+  } else {
+    clearTimeout(glance)
+    renderer.setFinishedPreview(true)
+    glance = setTimeout(() => renderer.setFinishedPreview(false), 1400)
+  }
+}
+
+const undo = () => step(-1)
+const redo = () => step(1)
+
 watch(framing, (value, before) => {
-  if (before) carryText(before, value)
+  if (before && !restores) carryText(before, value)
   renderer?.setFraming(value)
   if (time.value > duration.value) time.value = duration.value
 }, { immediate: true })
@@ -207,7 +330,11 @@ function start(maps) {
   status.value = ''
   jump(reducedMotion ? duration.value : 0)
   playing.value = !reducedMotion
+  resetHistory()
 }
+
+// The look of the handles, which a saved text does not carry.
+const dress = text => text.set({ cornerColor: '#cbdebc', cornerStrokeColor: '#141618', borderColor: '#cbdebc', transparentCorners: false, cornerSize: 11, padding: 8 })
 
 const pushText = () => renderer.setText(lettering ? board.lowerCanvasEl : null)
 
@@ -239,13 +366,16 @@ async function addText() {
     }
     // A click away from the text puts it down.
     board.on('selection:cleared', () => {
-      if (editingText.value) setTextEditing(false)
+      if (editingText.value && !restores) setTextEditing(false)
     })
+    // Moving, scaling, turning, and typing are each a step to undo.
+    board.on('object:modified', record)
+    board.on('text:editing:exited', record)
     board.on('text:selection:changed', follow)
     board.on('text:editing:entered', follow)
   }
   const unit = Math.max(canvas.value.width, canvas.value.height) / 1600
-  lettering = new fabric.IText('Directed by\nYour Name', {
+  lettering = dress(new fabric.IText('Directed by\nYour Name', {
     // Fabric places objects by their center.
     left: canvas.value.width * 0.5,
     top: canvas.value.height * 0.5,
@@ -254,13 +384,7 @@ async function addText() {
     lineHeight: textLine.value,
     textAlign: textAlign.value,
     fill: '#000',
-    cornerColor: '#cbdebc',
-    cornerStrokeColor: '#141618',
-    borderColor: '#cbdebc',
-    transparentCorners: false,
-    cornerSize: 11,
-    padding: 8,
-  })
+  }))
   lettering.setSelectionStyles({ fontSize: 86 * unit }, 0, 11) // the first line starts smaller
   lettering.initDimensions()
   board.add(lettering)
@@ -268,6 +392,7 @@ async function addText() {
   textSize.value = lettering.fontSize
   hasText.value = true
   setTextEditing(true)
+  record()
 }
 
 // Picking the text up shows the final frame, where it is laid out, and pauses the animation;
@@ -320,12 +445,14 @@ function setTextAlign(value) {
   textAlign.value = value
   lettering.set('textAlign', value)
   board.requestRenderAll()
+  record()
 }
 
 function setTextTone(light) {
   setTextEditing(true)
   textLight.value = light
   renderer.setTextStyle({ light, strength: textStrength.value })
+  record()
 }
 
 function setTextStrength(event) {
@@ -340,6 +467,7 @@ function removeText() {
   lettering = null
   hasText.value = false
   pushText()
+  record()
 }
 
 function stopVideo() {
@@ -585,6 +713,7 @@ function reshuffle() {
   seed += 1
   renderer.reseed(seed)
   replay()
+  record()
 }
 
 function scrub(event) {
@@ -597,6 +726,7 @@ function scrub(event) {
 function toggleColor() {
   color.value = !color.value
   renderer.setTint(color.value ? 1 : 0)
+  record()
 }
 
 // Dragging a sketch slider previews the bare drawing; releasing it returns to the animation.
@@ -624,6 +754,7 @@ function applyReach() {
   renderer.setMattePreview(null)
   jump(reducedMotion ? duration.value : effectStart.value) // straight to the effect
   playing.value = !reducedMotion
+  record()
 }
 
 // Background details only changes how the wash is painted, so it shows at once, on the
@@ -636,6 +767,7 @@ function setBackground(event) {
 
 function endFinishedPreview() {
   renderer.setFinishedPreview(false)
+  record()
 }
 
 function setFocus(event) {
@@ -646,6 +778,7 @@ function setFocus(event) {
 
 function endSketchPreview() {
   renderer.setSketchOnly(false)
+  record()
 }
 
 // Planning the final frame shows it as it will end up; letting go returns to the animation.
@@ -658,6 +791,7 @@ function plan() {
 function endPlanning() {
   clearTimeout(lingering)
   lingering = setTimeout(() => renderer.setPlanning(false), 1400)
+  commit()
 }
 
 function setRotation(event) {
@@ -673,17 +807,20 @@ function setScale(event) {
 function setMotion(event) {
   motion.value = event.target.value
   renderer.setMotion(motion.value)
+  record()
 }
 
 function setOutro(event) {
   outro.value = event.target.checked
   renderer.setOutro(outro.value)
+  record()
 }
 
 function resetFrame() {
   rotation.value = 0
   scaleWanted.value = 1
   panWanted.value = [0, 0]
+  commit()
 }
 
 // A press on the picture is a click until it moves; then it drags the photo to where it
@@ -737,6 +874,10 @@ function drop(event) {
 }
 
 function onKey(event) {
+  if ((event.metaKey || event.ctrlKey) && !event.altKey && (event.code === 'KeyZ' || event.code === 'KeyY')) {
+    event.preventDefault()
+    return event.shiftKey || event.code === 'KeyY' ? redo() : undo()
+  }
   if (event.code === 'Escape' && editingText.value && !event.target.closest('textarea')) return setTextEditing(false)
   if (event.code !== 'Space' || picking.value || editingText.value || event.target.closest('button, input, textarea')) return
   event.preventDefault()
@@ -791,6 +932,14 @@ onBeforeUnmount(() => {
       <div>
         <h1><RouterLink :to="{ name: 'start' }">Ink Wash</RouterLink></h1>
         <p>A photo becomes a pencil sketch on aged paper, then fills with spreading ink.</p>
+      </div>
+      <div class="history">
+        <button class="icon-quiet" type="button" :disabled="!canUndo" aria-label="Undo" title="Undo" @click="undo">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></svg>
+        </button>
+        <button class="icon-quiet" type="button" :disabled="!canRedo" aria-label="Redo" title="Redo" @click="redo">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 14l5-5-5-5M20 9H9.5a5.5 5.5 0 0 0 0 11H13" /></svg>
+        </button>
       </div>
     </header>
 
@@ -991,7 +1140,7 @@ onBeforeUnmount(() => {
             </div>
             <label class="field">
               <span class="field-head"><span>Intensity</span><output>{{ Math.round(textStrength * 100) }}%</output></span>
-              <input class="scrubber" type="range" min="0" max="1" step="0.01" :value="textStrength" :style="{ '--progress': `${textStrength * 100}%` }" @input="setTextStrength">
+              <input class="scrubber" type="range" min="0" max="1" step="0.01" :value="textStrength" :style="{ '--progress': `${textStrength * 100}%` }" @input="setTextStrength" @change="record">
             </label>
             <div class="field inline">
               <span>Align</span>
@@ -1001,11 +1150,11 @@ onBeforeUnmount(() => {
             </div>
             <label class="field">
               <span class="field-head"><span>Size</span><output>{{ Math.round(textSize) }}</output></span>
-              <input class="scrubber" type="range" min="30" max="420" step="1" :value="textSize" :style="{ '--progress': `${((textSize - 30) / 390) * 100}%` }" @input="setTextSize">
+              <input class="scrubber" type="range" min="30" max="420" step="1" :value="textSize" :style="{ '--progress': `${((textSize - 30) / 390) * 100}%` }" @input="setTextSize" @change="record">
             </label>
             <label class="field">
               <span class="field-head"><span>Line height</span><output>{{ textLine.toFixed(2) }}</output></span>
-              <input class="scrubber" type="range" min="0.5" max="1.8" step="0.01" :value="textLine" :style="{ '--progress': `${((textLine - 0.5) / 1.3) * 100}%` }" @input="setTextLine">
+              <input class="scrubber" type="range" min="0.5" max="1.8" step="0.01" :value="textLine" :style="{ '--progress': `${((textLine - 0.5) / 1.3) * 100}%` }" @input="setTextLine" @change="record">
             </label>
           </template>
         </PanelSection>
