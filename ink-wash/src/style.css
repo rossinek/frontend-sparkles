@@ -368,7 +368,7 @@ canvas {
   transition: transform 0.28s ease;
 }
 
-.expanded .panel-toggle svg { transform: none; }
+.expanded .panel-toggle svg, .panel-toggle svg.plus { transform: none; }
 .panel-toggle:hover svg { stroke: var(--accent); }
 
 .panel-body {

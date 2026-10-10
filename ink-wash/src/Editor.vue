@@ -294,7 +294,11 @@ function setTextSize(event) {
   textSize.value = Number(event.target.value)
   if (lettering.isEditing && lettering.selectionStart !== lettering.selectionEnd) lettering.setSelectionStyles({ fontSize: textSize.value })
   else {
-    lettering.removeStyle('fontSize')
+    // Parts sized on their own keep their proportion to the rest.
+    const grow = textSize.value / lettering.fontSize
+    for (const line of Object.values(lettering.styles)) {
+      for (const style of Object.values(line)) if (style.fontSize) style.fontSize *= grow
+    }
     lettering.set('fontSize', textSize.value)
   }
   lettering.initDimensions()
@@ -970,15 +974,14 @@ onBeforeUnmount(() => {
           </label>
         </PanelSection>
 
-        <PanelSection title="Text">
-          <div class="panel-actions">
-            <button v-if="!hasText" type="button" :disabled="!ready" @click="addText">Add text</button>
-            <template v-else>
-              <button type="button" @click="removeText">Remove text</button>
-            </template>
-          </div>
+        <PanelSection title="Text" :add="!hasText" :disabled="!ready" @add="addText">
+          <template #actions>
+            <button v-if="hasText" class="icon-quiet" type="button" aria-label="Remove text" title="Remove text" @click="removeText">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 7h15M10 7V4.5h4V7M6.5 7l1 12.5h9l1-12.5M10.5 11v5M13.5 11v5" /></svg>
+            </button>
+          </template>
           <template v-if="hasText">
-            <p class="section-note">Click the text on the picture to pick it up, shown in the final frame: drag it, or use its handles to scale and turn it. Double-click to type. Select part of it to size that part alone. Click away when done.</p>
+            <p class="section-note">Click the text on the picture to move it; double-click to type.</p>
             <div class="field inline">
               <span>Color</span>
               <div class="segmented" role="group" aria-label="Text color">
