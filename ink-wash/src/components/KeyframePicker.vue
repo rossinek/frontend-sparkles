@@ -117,7 +117,7 @@ onBeforeUnmount(() => {
     <div class="modal-box">
       <h2 id="keyframe-title">Choose the frame to paint</h2>
       <p>The video stops on this frame, turns into the painting, and carries on.</p>
-      <div class="modal-view" :style="{ aspectRatio: ratio }">
+      <div class="modal-view" :style="{ aspectRatio: ratio, width: `min(100%, ${58 * ratio}dvh)` }">
         <video ref="player" :src="src" muted playsinline preload="auto" @loadedmetadata="onMeta"></video>
         <canvas v-show="quickShown" ref="quick"></canvas>
         <!-- Plays through out of sight to gather the strip; it must stay rendered to give frames. -->

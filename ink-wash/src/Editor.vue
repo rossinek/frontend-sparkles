@@ -41,7 +41,7 @@ const unsupported = ref(false)
 const video = ref(null)
 const clip = ref(null) // { url, duration, key }
 const picking = ref(false)
-const whole = ref(true) // show the whole video, or just a second either side of the effect
+const whole = ref(false) // show the whole video, or just a second either side of the effect
 const showVideo = ref(false)
 let videoRunning = false
 let drawn = 0        // when the canvas was last drawn
@@ -622,11 +622,13 @@ onBeforeUnmount(() => {
             aria-label="Animation position"
             @input="scrub"
           >
+          <button class="icon" type="button" :disabled="!ready" aria-label="Replay" title="Replay" @click="replay">
+            <svg class="line" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 1.45-4.59M5 3.5v4h4" /></svg>
+          </button>
           <div v-if="hasKey" class="segmented" role="group" aria-label="Preview">
-            <button type="button" :aria-pressed="whole" :disabled="!ready" @click="setWhole(true)">Whole video</button>
             <button type="button" :aria-pressed="!whole" :disabled="!ready" @click="setWhole(false)">Effect only</button>
+            <button type="button" :aria-pressed="whole" :disabled="!ready" @click="setWhole(true)">Whole video</button>
           </div>
-          <button type="button" :disabled="!ready" @click="replay">Replay</button>
         </footer>
       </div>
 
