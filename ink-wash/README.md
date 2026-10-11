@@ -37,6 +37,7 @@ pnpm preview
 - **Outro**, when on, adds an ending: the camera snaps back to the photo's own frame while the photo spreads back over the painting from the middle, and as the camera lands long blots creep in from the edges. The photo comes back muted and sepia and regains its color as it goes. It takes about a second and a half.
 - **Focus** sets how much the viewer's attention changes the hatching. At zero the whole subject is hatched from tone alone; at full strength the places people look at get short strokes on one side of each contour and stay otherwise clean. While either slider is dragged, the bare drawing is shown so the change is easy to judge.
 - **Undo** and **Redo**, in the header or with Cmd/Ctrl+Z and Shift+Cmd/Ctrl+Z, step through the last 30 changes to the options and the lettering. A new photo, video, or keyframe starts the history over.
+- **Export** saves the animation as an MP4 (H.264, 720p or 1080p by the short side, 30 or 60 fps, no sound), as a looping GIF (640 px on the long side, 20 fps), or the finished frame as a PNG. With a video, the MP4 covers either the effect with a second on each side or the whole video; the GIF always covers the effect only. The file downloads when it is ready.
 
 ## How It Works
 
@@ -59,6 +60,8 @@ The two screens are hash routes (`src/main.js`): `#/` is the start screen and `#
 A video is played by a plain `<video>` element laid over the canvas; no decoding library is involved. The keyframe is grabbed from it with `createImageBitmap` and then treated exactly like a photo. During the video parts of the timeline the clock follows the video's own time, so the two cannot drift.
 
 The lettering is edited with [Fabric.js](https://fabricjs.com/), loaded on first use, on a layer over the canvas. Fabric's own drawing of the text is kept invisible: its canvas is handed to the shader as a texture, so what you edit is the painted result, and only the handles and caret come from Fabric. The texture is laid out in the final frame and mapped back onto the sheet, which is why the text travels with the camera.
+
+Export paints the animation again frame by frame, as fast as the frames come rather than in real time, so the frame rate is even on any machine. Each frame is drawn at the working size and scaled to the output size; video frames are fetched by seeking the source to the exact moment. MP4 is encoded with WebCodecs through [Mediabunny](https://mediabunny.dev/), GIF with [gifenc](https://github.com/mattdesl/gifenc); both are loaded on first use. A film that ends on the painting holds its last frame for half a second.
 
 Timing lives in `TIMELINE` in `src/engine/renderer.js`; the look of the paper and ink is in the `COMPOSITE` shader.
 

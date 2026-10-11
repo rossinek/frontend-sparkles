@@ -475,6 +475,11 @@ export function createRenderer(canvas) {
     /** @param {{ rotation: number, scale: number, pan: [number, number], still: boolean }} framing as returned by effective() */
     setFraming: framing => { state.framing = framing },
     setPlanning: value => { state.planning = value },
+    /** Drops every preview at once, guides included, so the next frame is the animation alone. */
+    settle: () => {
+      state.planning = state.sketchOnly = state.finished = state.matteView = state.textEdit = false
+      state.guides = 0
+    },
     /** Lettering as a canvas the size of the photo, ink in its alpha; null removes it. */
     setText: source => {
       state.text = !!source

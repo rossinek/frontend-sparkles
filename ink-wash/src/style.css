@@ -63,7 +63,9 @@ h1 {
 }
 
 /* Undo and redo sit over the panel, in the header, so they stay put when the panel scrolls. */
-.history { display: flex; gap: 6px; }
+.history { display: flex; align-items: center; gap: 6px; }
+.history button.export { display: flex; align-items: center; gap: 8px; margin-left: 10px; padding: 8px 16px 8px 13px; }
+.history button.export svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .history button.icon-quiet { width: 34px; height: 34px; }
 .history button.icon-quiet svg { width: 19px; height: 19px; }
 
@@ -257,6 +259,13 @@ canvas {
 
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
 
+.modal-box.narrow { width: min(440px, 100%); gap: 16px; }
+.modal-box.narrow p { margin: 0; }
+.export-summary { font-variant-numeric: tabular-nums; }
+
+.export-bar { height: 4px; overflow: hidden; background: rgb(80 87 79 / 0.5); border-radius: 4px; }
+.export-bar span { display: block; height: 100%; background: var(--accent); }
+
 .status {
   position: absolute;
   left: 50%;
@@ -327,7 +336,7 @@ canvas {
 }
 
 .panel > button.wide { margin-bottom: 10px; padding-block: 13px; }
-.panel > button.wide:not(.primary) { padding-block: 9px; }
+.panel > button.wide + button.wide { padding-block: 9px; }
 .panel > .panel-section:first-of-type { margin-top: 6px; }
 
 .panel-actions {

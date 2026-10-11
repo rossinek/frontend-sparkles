@@ -7,6 +7,8 @@ import { attention } from './engine/attention.js'
 import { growMatte } from './engine/reach.js'
 import PanelSection from './components/PanelSection.vue'
 import KeyframePicker from './components/KeyframePicker.vue'
+import ExportDialog from './components/ExportDialog.vue'
+import { fit, GIF_FPS, GIF_LONG, gifWriter, movieWriter } from './export.js'
 import { asset, chosenFile, SAMPLES } from './source.js'
 
 const route = useRoute()
@@ -219,7 +221,7 @@ function record() {
 const commit = () => nextTick(record)
 
 function step(by) {
-  if (!ready.value || picking.value) return
+  if (!ready.value || picking.value || exporting.value) return
   if (lettering?.isEditing) lettering.exitEditing() // typing in progress becomes a step of its own
   const next = cursor + by
   if (next < 0 || next >= history.length) return
@@ -283,6 +285,124 @@ async function restore(to) {
     clearTimeout(glance)
     renderer.setFinishedPreview(true)
     glance = setTimeout(() => renderer.setFinishedPreview(false), 1400)
+  }
+}
+
+// Export: the animation is painted again frame by frame, at its own pace rather than in
+// real time, and handed to an encoder. The editor stands still meanwhile, since the frames
+// come off its own canvas.
+const HOLD = 0.5 // the last frame stays up this long when the film ends on the painting
+const exporting = ref(null) // the dialog: { stage, progress, url, name, message }
+let exportJob = 0
+let busy = false // the canvas belongs to the export; the editor's own drawing waits
+
+// How long the film would be, with all of a video or just the effect and a second either side.
+function lengthFor(all) {
+  if (!hasKey.value) return effectDuration.value + HOLD
+  const { key, duration: total } = clip.value
+  const before = all ? key : Math.min(1, key)
+  const after = all ? total - key : Math.min(1, total - key)
+  const tail = outro.value ? Math.min(OUTRO_LENGTH, after) : 0
+  return before - Math.min(OVERLAP, before) + effectDuration.value - tail + after + (after < 0.02 ? HOLD : 0)
+}
+const exportLengths = computed(() => ({ effect: lengthFor(false), whole: lengthFor(true) }))
+
+function openExport() {
+  if (!ready.value) return
+  resumeAfterText = false
+  setTextEditing(false)
+  playing.value = false
+  exporting.value = { stage: 'options' }
+}
+
+function closeExport() {
+  exportJob += 1 // stops a run in progress
+  if (exporting.value?.url) URL.revokeObjectURL(exporting.value.url)
+  exporting.value = null
+}
+
+function download() {
+  const link = document.createElement('a')
+  link.href = exporting.value.url
+  link.download = exporting.value.name
+  link.click()
+}
+
+// Paints one moment of the timeline onto the export's own canvas, as the editor would show it.
+async function paintMoment(at, context) {
+  const { width, height } = context.canvas
+  const effectTime = at - effectStart.value
+  const outside = hasKey.value && (effectTime < 0 || (effectTime >= effectDuration.value && trail.value >= 0.02 && at > resume.value))
+  const overlapping = hasKey.value && effectTime >= 0 && (at < lead.value || (tailOverlap.value > 0 && at >= resume.value))
+  if (outside || overlapping) {
+    const moment = at < lead.value ? clip.value.key - (lead.value - at) : clip.value.key + (at - resume.value)
+    await seekTo(video.value, Math.min(Math.max(moment, 0), clip.value.duration))
+  }
+  if (outside) return context.drawImage(video.value, 0, 0, width, height)
+  renderer.setLive(overlapping ? video.value : null)
+  renderer.render(Math.min(Math.max(effectTime, 0), effectDuration.value))
+  context.drawImage(canvas.value, 0, 0, width, height) // straight after the draw, while the picture is still there
+}
+
+async function runExport(options) {
+  const id = ++exportJob
+  const kept = { whole: whole.value, time: time.value }
+  const surface = document.createElement('canvas')
+  let writer = null
+  exporting.value = { stage: 'working', progress: 0 }
+  stopVideo()
+  clearTimeout(lingering)
+  clearTimeout(glance)
+  renderer.settle()
+  busy = true
+  try {
+    const { width, height } = canvas.value
+    let blob
+    if (options.format === 'png') {
+      Object.assign(surface, { width, height })
+      renderer.setLive(null)
+      renderer.setFinishedPreview(true)
+      renderer.render(0)
+      surface.getContext('2d').drawImage(canvas.value, 0, 0)
+      renderer.setFinishedPreview(false)
+      blob = await new Promise(resolve => surface.toBlob(resolve, 'image/png'))
+    } else {
+      const gif = options.format === 'gif'
+      const fps = gif ? GIF_FPS : options.fps
+      Object.assign(surface, gif ? fit(width, height, { long: GIF_LONG }) : fit(width, height, { short: options.height }))
+      const context = surface.getContext('2d', { willReadFrequently: gif })
+      context.imageSmoothingQuality = 'high'
+      whole.value = options.whole // the clock's parts follow the chosen range
+      writer = gif ? await gifWriter(surface.width, surface.height, fps) : await movieWriter(surface, fps)
+      const moving = Math.round(duration.value * fps)
+      const still = Math.round((trail.value < 0.02 ? HOLD : 0) * fps)
+      let breath = performance.now()
+      for (let index = 0; index <= moving + still; index++) {
+        if (index <= moving) await paintMoment(Math.min(index / fps, duration.value), context)
+        if (id !== exportJob) break
+        await writer.add(index, context)
+        // The page gets a turn now and then, to show the progress and hear Cancel.
+        if (id === exportJob && performance.now() - breath > 60) {
+          exporting.value = { stage: 'working', progress: index / (moving + still + 1) }
+          await new Promise(resolve => setTimeout(resolve))
+          breath = performance.now()
+        }
+      }
+      if (id === exportJob) blob = await writer.finish()
+    }
+    if (id !== exportJob) await writer?.cancel()
+    else {
+      exporting.value = { stage: 'done', url: URL.createObjectURL(blob), name: `ink-wash.${options.format}` }
+      download()
+    }
+  } catch (error) {
+    console.error(error)
+    if (id === exportJob) exporting.value = { stage: 'error', message: error?.message || 'The export failed.' }
+  } finally {
+    whole.value = kept.whole
+    renderer.setLive(null)
+    busy = false
+    jump(Math.min(kept.time, duration.value))
   }
 }
 
@@ -646,6 +766,7 @@ function advance(delta) {
 
 function tick(now) {
   frame = requestAnimationFrame(tick)
+  if (busy) return
   const delta = Math.min((now - last) / 1000, 0.1)
   last = now
   if (playing.value) advance(delta)
@@ -885,6 +1006,7 @@ function fadePanel() {
 }
 
 function onKey(event) {
+  if (exporting.value) return
   if ((event.metaKey || event.ctrlKey) && !event.altKey && (event.code === 'KeyZ' || event.code === 'KeyY')) {
     event.preventDefault()
     return event.shiftKey || event.code === 'KeyY' ? redo() : undo()
@@ -955,6 +1077,10 @@ onBeforeUnmount(() => {
         <button class="icon-quiet" type="button" :disabled="!canRedo" aria-label="Redo" title="Redo" @click="redo">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 14l5-5-5-5M20 9H9.5a5.5 5.5 0 0 0 0 11H13" /></svg>
         </button>
+        <button class="primary export" type="button" :disabled="!ready" @click="openExport">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19.5h14" /></svg>
+          Export
+        </button>
       </div>
     </header>
 
@@ -1008,7 +1134,7 @@ onBeforeUnmount(() => {
       </div>
 
       <aside ref="panel" class="panel" aria-label="Options" @scroll.passive="fadePanel">
-        <button class="primary wide" type="button" :disabled="unsupported" @click="fileInput.click()">{{ clip ? 'Replace video' : 'Replace photo' }}</button>
+        <button class="wide" type="button" :disabled="unsupported" @click="fileInput.click()">{{ clip ? 'Replace video' : 'Replace photo' }}</button>
         <button v-if="clip" class="wide" type="button" :disabled="clip.key == null && !picking" @click="changeKeyframe">Change keyframe</button>
         <input ref="fileInput" type="file" accept="image/*,video/*" hidden @change="pick">
         <PanelSection title="Fill">
@@ -1188,6 +1314,18 @@ onBeforeUnmount(() => {
       :cancelable="clip.key != null"
       @confirm="useKeyframe"
       @cancel="picking = false"
+    />
+    <ExportDialog
+      v-if="exporting"
+      :state="exporting"
+      :size="{ width: canvas.width, height: canvas.height }"
+      :video="hasKey"
+      :whole="whole"
+      :lengths="exportLengths"
+      @start="runExport"
+      @cancel="closeExport"
+      @close="closeExport"
+      @download="download"
     />
   </main>
 </template>
