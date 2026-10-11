@@ -47,7 +47,7 @@ function drop(event) {
           <div class="print after">
             <img :src="asset('example/after.jpg')" alt="The same photo as a sepia ink painting over a pencil sketch" width="1200" height="800">
             <span>After</span>
-            <figcaption>Photo by <a :href="EXAMPLE.page" target="_blank" rel="noopener">{{ EXAMPLE.by }}</a>.</figcaption>
+            <p class="credit">Photo by <a :href="EXAMPLE.page" target="_blank" rel="noopener">{{ EXAMPLE.by }}</a>.</p>
           </div>
         </div>
       </figure>

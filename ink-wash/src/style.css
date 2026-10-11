@@ -669,13 +669,13 @@ canvas { touch-action: none; }
 
 .example { margin: 36px 0 0; }
 
-.example figcaption, .fine, .samples a:not(.sample) {
+.example .credit, .fine, .samples a:not(.sample) {
   color: var(--muted);
   font-size: 11px;
 }
 
 /* The credit hangs under the after print and turns with it. */
-.example figcaption {
+.example .credit {
   position: absolute;
   top: 100%;
   left: 0;
