@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { createRenderer, durationFor, OUTRO_LENGTH, WIDE, WORK_SIZE } from './engine/renderer.js'
+import { createRenderer, durationFor, holdRange, lastScene, OUTRO_LENGTH, WIDE, WORK_SIZE } from './engine/renderer.js'
 import { effective, MAX_ROTATION, MAX_SCALE } from './engine/framing.js'
 import { attention } from './engine/attention.js'
 import { growMatte } from './engine/reach.js'
@@ -37,6 +37,7 @@ const panWanted = ref([0, 0])
 const aspect = ref(1600 / 1006)
 const motion = ref('rhythmic')
 const outro = ref(false)
+const sceneWanted = ref(null) // seconds the last scene should last; null leaves it to the style
 const credit = ref(null) // the sample being shown, if it is one
 const unsupported = ref(false)
 // A video source: the effect still runs on one frame of it, the keyframe, which the user
@@ -96,7 +97,19 @@ let grab = null
 let lingering = 0
 
 const framing = computed(() => effective({ rotation: rotation.value, scale: scaleWanted.value, pan: panWanted.value }, aspect.value, WIDE))
-const effectDuration = computed(() => durationFor(framing.value, outro.value))
+// The last scene's length: the one asked for, held within what the style allows. `hold` is
+// how much that differs from the time the style takes by itself, which is what the renderer wants.
+const holdSpan = computed(() => {
+  const own = lastScene(framing.value, motion.value)
+  const [least, most] = holdRange(framing.value, motion.value)
+  const min = Math.round((own + least) * 10) / 10
+  const max = Math.round((own + most) * 10) / 10
+  const value = Math.min(Math.max(sceneWanted.value ?? own, min), max)
+  return { own, min, max, value, progress: `${((value - min) / (max - min)) * 100}%` }
+})
+const hold = computed(() => holdSpan.value.value - holdSpan.value.own)
+watch(hold, value => renderer?.setHold(value))
+const effectDuration = computed(() => durationFor(framing.value, outro.value, hold.value))
 // With a video, the clock runs through three parts: the video up to the keyframe, the
 // effect on that frame, and the video from the keyframe on.
 const hasKey = computed(() => clip.value?.key != null)
@@ -191,6 +204,7 @@ const snapshot = () => ({
   pan: [...panWanted.value],
   motion: motion.value,
   outro: outro.value,
+  scene: sceneWanted.value,
   seed,
   textLight: textLight.value,
   textStrength: textStrength.value,
@@ -245,6 +259,7 @@ async function restore(to) {
   panWanted.value = to.pan
   motion.value = to.motion
   outro.value = to.outro
+  sceneWanted.value = to.scene
   textLight.value = to.textLight
   textStrength.value = to.textStrength
   seed = to.seed
@@ -938,6 +953,10 @@ function setOutro(event) {
   record()
 }
 
+function setHold(event) {
+  sceneWanted.value = Number(event.target.value)
+}
+
 function resetFrame() {
   rotation.value = 0
   scaleWanted.value = 1
@@ -1257,6 +1276,10 @@ onBeforeUnmount(() => {
               <option value="smooth">Smooth</option>
               <option value="rapid">Rapid</option>
             </select>
+          </label>
+          <label class="field">
+            <span class="field-head"><span class="hint" tabindex="0" aria-describedby="tip-hold">Last scene<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" /><path d="M8 7.2v4M8 4.7v.1" /></svg><span id="tip-hold" class="tip" role="tooltip">How long the picture stays once the camera has arrived, before the outro or the end.</span></span><output>{{ holdSpan.value.toFixed(1) }} s</output></span>
+            <input class="scrubber" type="range" :min="holdSpan.min" :max="holdSpan.max" step="0.1" :value="holdSpan.value" :disabled="!ready" :style="{ '--progress': holdSpan.progress }" @input="setHold" @change="record">
           </label>
           <label class="field inline">
             <span class="hint" tabindex="0" aria-describedby="tip-outro">Outro<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" /><path d="M8 7.2v4M8 4.7v.1" /></svg><span id="tip-outro" class="tip" role="tooltip">After the painting, the camera returns to the photo's own frame and the photo spreads back over it from the middle.</span></span>

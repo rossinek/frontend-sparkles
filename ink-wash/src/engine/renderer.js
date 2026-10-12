@@ -36,7 +36,8 @@ const easings = {
 // does its own share of the sideways travel, the vertical travel, the turn, and the zoom;
 // every column adds up to 1. All of them hold a little back and spend it slowly right up to
 // the last moment, so the scene never quite stands still.
-// [delay after start, length, shares, easing]
+// [delay after start, length, shares, easing]; a length of null runs to the last moment,
+// however long the last scene is held.
 export const MOTIONS = {
   // Three quick pushes on an even rhythm: the first mostly sideways with a hint of turn, the
   // later ones carrying the vertical travel and most of the rotation.
@@ -44,22 +45,46 @@ export const MOTIONS = {
     [0, 0.5, { x: 0.72, y: 0.08, turn: 0.1, zoom: 0.42 }, easings.out(4)],
     [0.55, 0.5, { x: 0.2, y: 0.57, turn: 0.52, zoom: 0.33 }, easings.out(4)],
     [1.1, 1.4, { x: 0.052, y: 0.2275, turn: 0.247, zoom: 0.1625 }, easings.out(4)],
-    [1.1, TAIL - 1.1, { x: 0.028, y: 0.1225, turn: 0.133, zoom: 0.0875 }, easings.out(2)],
+    [1.1, null, { x: 0.028, y: 0.1225, turn: 0.133, zoom: 0.0875 }, easings.out(2)],
   ],
   // One slow glide that eases in and out, then a long, slow run-out.
   smooth: [
     [0, 3.4, together(0.85), easings.inOut()],
-    [1.4, TAIL - 1.4, together(0.15), easings.out(2)],
+    [1.4, null, together(0.15), easings.out(2)],
   ],
   // One fast push that brakes hard, then the same slow run-out.
   rapid: [
     [0, 0.7, together(0.82), easings.out(4)],
-    [0.3, TAIL - 0.3, together(0.18), easings.out(2.5)],
+    [0.3, null, together(0.18), easings.out(2.5)],
   ],
 }
 
-/** How long the animation runs: longer when the camera moves, so the sheet can finish. */
-const mainDuration = framing => (framing.still ? TIMELINE.duration : PULL.total)
+/** How long the animation runs: longer when the camera moves, so the sheet can finish, plus any time the last scene is held. */
+const mainDuration = (framing, hold = 0) => (framing.still ? TIMELINE.duration : PULL.total) + hold
+
+// When each style's pushes are over, in seconds from the start of the move; only the slow
+// run-out is left after that.
+const ARRIVED = { rhythmic: 2.5, smooth: 3.4, rapid: 0.7 }
+
+// The whole animation is never shorter than this: the first wash and the lettering need it.
+const SHORTEST = 2.6
+
+/**
+ * How long the last scene lasts: from the camera's arrival (or, when it stays put, from the
+ * paper covering the photo) to the outro or the end. `hold` is how much the user has added
+ * to it or taken from it.
+ */
+export const lastScene = (framing, motion, hold = 0) => (framing.still ? TIMELINE.duration - PULL.start : TAIL - ARRIVED[motion]) + hold
+
+/**
+ * How far `hold` can go, in seconds: up to six more, and down until the scene is only a
+ * moment long or the whole animation is at its shortest.
+ */
+export function holdRange(framing, motion) {
+  if (framing.still) return [SHORTEST - TIMELINE.duration, 6]
+  const arrival = PULL.start + ARRIVED[motion]
+  return [Math.max(0.1, SHORTEST - arrival) - (TAIL - ARRIVED[motion]), 6]
+}
 
 // The optional outro: the camera snaps back to the photo's own frame while the photo starts
 // to spread back over the painting from the middle; as the camera lands, more blots burst in
@@ -71,7 +96,7 @@ const OUTRO = { camera: 0.5, total: 1.5 }
 export const OUTRO_LENGTH = OUTRO.total
 
 /** How long everything runs, with the outro if it is on. */
-export const durationFor = (framing, outro = false) => mainDuration(framing) + (outro ? OUTRO.total : 0)
+export const durationFor = (framing, outro = false, hold = 0) => mainDuration(framing, hold) + (outro ? OUTRO.total : 0)
 
 // Rhythmic only: when the planned frame is not turned (or barely), the pushes lean the
 // picture into its sideways travel: 2.5° on the first, easing back to 1° on the second, and
@@ -86,10 +111,10 @@ function swingAt(t, framing) {
 }
 
 // How far each part of the camera move has come at time t, 0…1.
-function pullAt(t, motion) {
+function pullAt(t, motion, hold) {
   const done = { x: 0, y: 0, turn: 0, zoom: 0 }
   for (const [delay, length, shares, ease] of MOTIONS[motion]) {
-    const eased = ease(Math.min(Math.max((t - PULL.start - delay) / length, 0), 1))
+    const eased = ease(Math.min(Math.max((t - PULL.start - delay) / (length ?? TAIL + hold - delay), 0), 1))
     for (const part in done) done[part] += shares[part] * eased
   }
   return done
@@ -141,7 +166,7 @@ export function createRenderer(canvas) {
   gl.bindVertexArray(vao)
   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1)
 
-  const state = { width: 0, height: 0, source: null, ready: false, tint: 0, seed: 1, levels: [0, 1], hatching: 0.5, focus: 1, lines: 'sketch', sketchOnly: false, planning: false, guides: 0, matteView: false, outro: false, live: false, text: false, textEdit: false, textLight: false, textStrength: 0.9, background: 0.8, finished: false, motion: 'rhythmic', framing: { rotation: 0, scale: 1, pan: [0, 0], still: true } }
+  const state = { width: 0, height: 0, source: null, ready: false, tint: 0, seed: 1, levels: [0, 1], hatching: 0.5, focus: 1, lines: 'sketch', sketchOnly: false, planning: false, guides: 0, matteView: false, outro: false, hold: 0, live: false, text: false, textEdit: false, textLight: false, textStrength: 0.9, background: 0.8, finished: false, motion: 'rhythmic', framing: { rotation: 0, scale: 1, pan: [0, 0], still: true } }
   const textures = {}
   const targets = {}
 
@@ -381,16 +406,16 @@ export function createRenderer(canvas) {
     state.guides += ((state.planning ? 1 : 0) - state.guides) * 0.25 // eased in and out, frame by frame
     // The Reach preview shows the plain photo, so the camera stays where it starts.
     // Previews of the finished picture show the end of the painting, before any outro.
-    const end = mainDuration(framing)
-    const clock = state.matteView ? 0 : state.planning || state.finished || state.textEdit ? end : Math.min(Math.max(time, 0), durationFor(framing, state.outro))
+    const end = mainDuration(framing, state.hold)
+    const clock = state.matteView ? 0 : state.planning || state.finished || state.textEdit ? end : Math.min(Math.max(time, 0), durationFor(framing, state.outro, state.hold))
     const t = Math.min(clock, end) // the painting itself stops here
     const after = clock - end      // seconds into the outro
     // The camera goes from the photo filling the viewport to the planned frame. Left where
     // it is, it keeps the slow push-in the animation always had.
-    let camera = { rotation: 0, scale: 1 + 0.035 * (t / TIMELINE.duration), pan: [0, 0] }
+    let camera = { rotation: 0, scale: 1 + 0.035 * (t / end), pan: [0, 0] }
     let pull = 0
     if (pulledBack) {
-      const done = pullAt(t, state.motion)
+      const done = pullAt(t, state.motion, state.hold)
       pull = done.zoom
       // The parts travel out of step, so a point along the way is not automatically one the
       // sheet can cover; it is held to what can be shown, as the planned frame itself is.
@@ -423,8 +448,10 @@ export function createRenderer(canvas) {
       uAspect: [state.width / state.height, 1],
       uSize: [state.width, state.height],
       uPaper: TIMELINE.paper,
-      uInk: TIMELINE.ink,
-      uAccent: TIMELINE.accent,
+      uInk: [TIMELINE.ink[0], Math.min(TIMELINE.ink[1], end - TIMELINE.ink[0] - 0.25), TIMELINE.ink[2]],
+      // Cut short, the last scene leaves the washes, the darks, and the lettering less time.
+      uAccent: [TIMELINE.accent[0], Math.min(TIMELINE.accent[1], end - TIMELINE.accent[0]), TIMELINE.accent[2]],
+      uPace: pulledBack ? Math.min(1, (TAIL + state.hold) / TAIL) : 1,
       uTint: state.tint,
       uSketchOnly: state.sketchOnly ? 1 : 0,
       uLevels: state.levels,
@@ -451,6 +478,7 @@ export function createRenderer(canvas) {
         }
       })(),
       uTextStart: TEXT_START,
+      uTextGrow: Math.min(1.2, end - TEXT_START - 0.1),
       uTextLight: state.textLight ? 1 : 0,
       uTextStrength: state.textStrength,
       uOutro: after > 0 ? after : -1,
@@ -474,6 +502,8 @@ export function createRenderer(canvas) {
     setSketchOnly: value => { state.sketchOnly = value },
     /** @param {{ rotation: number, scale: number, pan: [number, number], still: boolean }} framing as returned by effective() */
     setFraming: framing => { state.framing = framing },
+    /** Seconds added to the last scene, before the outro or the end. */
+    setHold: value => { state.hold = value },
     setPlanning: value => { state.planning = value },
     /** Drops every preview at once, guides included, so the next frame is the animation alone. */
     settle: () => {

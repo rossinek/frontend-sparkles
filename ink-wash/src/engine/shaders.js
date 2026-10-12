@@ -283,13 +283,14 @@ uniform float uBackground;       // 1 keeps the background's detail; lower simpl
 uniform float uGroundOn;         // 0 at full detail, where the untouched background is used
 uniform float uGroundLod;        // how coarse the simplification is, in mip levels
 uniform sampler2D uText;     // lettering, laid out in the final frame; its alpha is the ink
-uniform float uTextOn, uTextStart, uTextLight, uTextStrength;
+uniform float uTextOn, uTextStart, uTextGrow, uTextLight, uTextStrength;
 uniform vec2 uTextX, uTextY, uTextPan; // takes a point on the sheet to where it sits in the final frame
 uniform sampler2D uLive;     // what lies under the paper: the photo, or a video still playing
 uniform sampler2D uMatteTry; // the subject being tried out with Reach
 uniform float uMatteView;    // 1 while it is shown
 // uPull runs 0…1 as the camera moves to the planned frame; uPullStart is when it begins (s).
 uniform float uPull, uPullStart;
+uniform float uPace; // below 1 when the last scene is cut short: the wash past the photo hurries to be done in time
 uniform vec2 uLevels;
 
 float hash(vec2 p) {
@@ -367,8 +368,8 @@ float blots(vec2 p) {
     vec2 center = corner + vec2(hash(vec2(k, 2.1)), hash(vec2(k, 8.7))) * uPad * uAspect;
     float radius = mix(0.1, 0.26, pow(hash(vec2(k, 5.5)), 1.3));
     // Each drop lands at its own moment after the pull-back begins and spreads from a point.
-    float born = uPullStart + 0.4 + 2.8 * hash(vec2(k, 6.6));
-    float grown = smoothstep(0.0, 1.0, (uTime - born) / 1.8);
+    float born = uPullStart + (0.4 + 2.8 * hash(vec2(k, 6.6))) * uPace;
+    float grown = smoothstep(0.0, 1.0, (uTime - born) / (1.8 * uPace));
     if (grown <= 0.0) continue;
     float d = length(p - center + warp) / (radius * (0.25 + 0.75 * grown));
     float reach = exp(-2.2 * d * d) * smoothstep(0.0, 0.25, grown); // at full size: the threshold below at the drop's own radius
@@ -378,7 +379,7 @@ float blots(vec2 p) {
   const float EDGE = 0.111;
   float pool = smoothstep(EDGE, EDGE * 1.3, field);
   float rim = pool * (1.0 - smoothstep(EDGE * 1.2, EDGE * 2.4, field));
-  float dried = smoothstep(uPullStart + 2.0, uPullStart + 4.6, uTime); // the rim shows as the pool dries
+  float dried = smoothstep(uPullStart + 2.0 * uPace, uPullStart + 4.6 * uPace, uTime); // the rim shows as the pool dries
   return tone / max(field, 1e-4) * (pool * 0.55 + rim * 0.5 * (0.25 + 0.75 * dried));
 }
 
@@ -566,14 +567,14 @@ void main() {
   // It is laid out in the final frame, wherever the camera ends up, so it can sit on the
   // margin as well as on the photo. It arrives a beat after the strong ink: at first only the
   // heaviest parts of the strokes, bitten into by noise, which then spread to the full
-  // letters in about 1.2 s.
+  // letters in about 1.2 s (uTextGrow).
   if (uTextOn > 0.5) {
     vec2 q = (uv - 0.5) * uAspect;
     vec2 at = (vec2(dot(uTextX, q), dot(uTextY, q)) + uTextPan) / uAspect + 0.5;
     if (at.x > 0.0 && at.x < 1.0 && at.y > 0.0 && at.y < 1.0) {
       float lettering = texture(uText, at).a;
       float core = textureLod(uText, at, 2.6).a;
-      float grown = clamp((uTime - uTextStart) / 1.2, 0.0, 1.0);
+      float grown = clamp((uTime - uTextStart) / uTextGrow, 0.0, 1.0);
       float bite = fbm(p * 90.0 + uSeed * 2.0) - 0.5;
       float reach = mix(0.78, -0.3, grown * grown * (3.0 - 2.0 * grown));
       float written = lettering * smoothstep(reach, reach + 0.16, core + bite * 0.4) * step(uTextStart, uTime);
